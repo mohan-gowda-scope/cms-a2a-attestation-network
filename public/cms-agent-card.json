@@ -1,0 +1,27 @@
+{
+  "name": "CMS Attestation Agent",
+  "description": "Autonomous agent for healthcare provider attestation validation.",
+  "type": "a2a-agent",
+  "version": "1.0.0",
+  "capabilities": [
+    {
+      "method": "attest_healthcare_data",
+      "description": "Submit clinical or provider attestation data for validation.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "provider_id": { "type": "string" },
+          "attestation_type": { "type": "string" },
+          "data": { "type": "object" }
+        },
+        "required": ["provider_id", "attestation_type", "data"]
+      }
+    }
+  ],
+  "endpoints": [
+    {
+      "type": "json-rpc",
+      "url": "REPLACE_WITH_API_ENDPOINT"
+    }
+  ]
+}

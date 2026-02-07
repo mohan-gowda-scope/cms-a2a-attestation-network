@@ -1,11 +1,12 @@
+import functions_framework
 import json
 import os
-import uuid
 import urllib.request
+import uuid
 
 def request_prior_auth(provider_id, patient_id, cms_vc):
     """
-    Initiate an A2A Prior Auth request to a Payer via the Clearinghouse.
+    Initiate an A2A Prior Auth request to a Payer.
     """
     ch_endpoint = os.environ.get('CLEARINGHOUSE_A2A_ENDPOINT')
     payload = {
@@ -32,27 +33,25 @@ def request_prior_auth(provider_id, patient_id, cms_vc):
     with urllib.request.urlopen(req) as res:
         return json.loads(res.read().decode('utf-8'))
 
-def lambda_handler(event, context):
+@functions_framework.http
+def provider_agent(request):
     """
-    Provider Agent Lambda - Phase 3
+    Healthcare Provider Agent - Phase 3 Logic
     """
-    # In a real scenario, this would be triggered by an S3 upload or EHR event
-    provider_id = "AWS-PROV-123"
-    patient_id = "PAT-ABC"
+    # Simulate a trigger (e.g., file upload result)
+    # 1. First get Attestation (Phase 1/2) 
+    # 2. Then use result to get Prior Auth (Phase 3)
     
-    # Mocking a VC that would have been received from CMS in Phase 1/2
+    # For this demo, we'll assume a CMS VC is already available
     mock_cms_vc = {
-        "id": "urn:uuid:mock-vc-456",
+        "id": "urn:uuid:mock-vc-123",
         "issuer": "did:web:cms.gov:agent:a2a-v1",
         "proof": {"type": "Ed25519Signature2020", "verificationMethod": "did:web:cms.gov:agent:a2a-v1#key-1"}
     }
     
-    auth_result = request_prior_auth(provider_id, patient_id, mock_cms_vc)
+    auth_result = request_prior_auth("GCP-PROV-99", "PAT-555", mock_cms_vc)
     
-    return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "flow": "AWS-Prior-Auth-Pipeline",
-            "result": auth_result
-        })
-    }
+    return json.dumps({
+        "flow": "Prior-Auth-Pipeline",
+        "payer_response": auth_result
+    }), 200, {'Content-Type': 'application/json'}
