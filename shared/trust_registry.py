@@ -30,6 +30,26 @@ class TrustRegistry:
             "public_key": "WjNnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndz==", 
             "endpoint": "https://us-central1-lab-project.cloudfunctions.net/lab_agent",
             "type": "DiagnosticLab"
+        },
+        "did:web:auditor-v1.gov": {
+            "public_key": "QXVkaXRvcl9QdWJsaWNfS2V5X1BsYWNlaG9sZGVyXzMyQg==", 
+            "endpoint": "https://us-central1-auditor-project.cloudfunctions.net/auditor_agent",
+            "type": "RegulatoryAuditor"
+        },
+        "did:web:credentialing-v1.gov": {
+            "public_key": "Q3JlZGVudGlhbGluZ19QdWJsaWNfS2V5X1BsYWNlaG9sZA==", 
+            "endpoint": "https://us-central1-cred-project.cloudfunctions.net/credentialing_agent",
+            "type": "CredentialingBody"
+        },
+        "did:web:patient-v1.me": {
+            "public_key": "UGF0aWVudF9QdWJsaWNfS2V5X1BsYWNlaG9sZGVyXzMxQg==", 
+            "endpoint": "https://patient-proxy.healthcare.me/agent",
+            "type": "PatientProxy"
+        },
+        "did:web:research-v1.edu": {
+            "public_key": "UmVzZWFyY2hfUHVibGljX0tleV9QbGFjZWhvbGRlcl8zMg==", 
+            "endpoint": "https://us-central1-research-project.cloudfunctions.net/research_agent",
+            "type": "ClinicalResearchBody"
         }
     }
 

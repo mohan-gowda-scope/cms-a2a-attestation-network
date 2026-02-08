@@ -107,6 +107,114 @@ resource "google_storage_bucket" "claims_dropbox" {
   }
 }
 
+# --- Patient Agent Cloud Function (Phase 10) ---
+resource "google_cloudfunctions2_function" "patient_agent" {
+  name        = "${var.project_name}-patient"
+  location    = var.region
+  
+  build_config {
+    runtime     = "python311"
+    entry_point = "patient_agent"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.patient_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = "256Mi"
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
+# --- Research Agent Cloud Function (Phase 10) ---
+resource "google_cloudfunctions2_function" "research_agent" {
+  name        = "${var.project_name}-research"
+  location    = var.region
+  
+  build_config {
+    runtime     = "python311"
+    entry_point = "research_agent"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.research_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = "256Mi"
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
+# --- Auditor Agent Cloud Function (Phase 9) ---
+resource "google_cloudfunctions2_function" "auditor_agent" {
+  name        = "${var.project_name}-auditor"
+  location    = var.region
+  
+  build_config {
+    runtime     = "python311"
+    entry_point = "auditor_agent"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.auditor_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = "256Mi"
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
+# --- Credentialing Agent Cloud Function (Phase 9) ---
+resource "google_cloudfunctions2_function" "credentialing_agent" {
+  name        = "${var.project_name}-cred"
+  location    = var.region
+  
+  build_config {
+    runtime     = "python311"
+    entry_point = "credentialing_agent"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.cred_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = "256Mi"
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
 # --- Lab Agent Cloud Function (Phase 8) ---
 resource "google_cloudfunctions2_function" "lab_agent" {
   name        = "${var.project_name}-lab"
@@ -207,6 +315,30 @@ resource "google_storage_bucket_object" "lab_zip" {
   source = "${path.module}/lab_agent.zip"
 }
 
+resource "google_storage_bucket_object" "auditor_zip" {
+  name   = "auditor_agent.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "${path.module}/auditor_agent.zip"
+}
+
+resource "google_storage_bucket_object" "cred_zip" {
+  name   = "cred_agent.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "${path.module}/cred_agent.zip"
+}
+
+resource "google_storage_bucket_object" "patient_zip" {
+  name   = "patient_agent.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "${path.module}/patient_agent.zip"
+}
+
+resource "google_storage_bucket_object" "research_zip" {
+  name   = "research_agent.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "${path.module}/research_agent.zip"
+}
+
 # --- Update Clearinghouse ENV for Phase 3 ---
 resource "google_cloudfunctions2_function" "clearinghouse" {
   name        = "${var.project_name}-clearinghouse"
@@ -234,6 +366,10 @@ resource "google_cloudfunctions2_function" "clearinghouse" {
       PAYER_A2A_ENDPOINT = google_cloudfunctions2_function.payer_agent.url
       PBM_A2A_ENDPOINT = google_cloudfunctions2_function.pbm_agent.url
       LAB_A2A_ENDPOINT = google_cloudfunctions2_function.lab_agent.url
+      AUDITOR_A2A_ENDPOINT = google_cloudfunctions2_function.auditor_agent.url
+      CRED_A2A_ENDPOINT = google_cloudfunctions2_function.credentialing_agent.url
+      PATIENT_A2A_ENDPOINT = google_cloudfunctions2_function.patient_agent.url
+      RESEARCH_A2A_ENDPOINT = google_cloudfunctions2_function.research_agent.url
     }
   }
 }

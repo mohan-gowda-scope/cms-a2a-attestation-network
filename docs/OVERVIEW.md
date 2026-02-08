@@ -22,6 +22,30 @@ The core validator. It uses **Vertex AI (Gemini 1.5 Flash)** to perform semantic
 
 The final decision node. It receives a "Prior Authorization" request from the Provider, accompanied by the CMS Verifiable Credential. It verifies the cryptographic proof against the global Trust Registry and auto-approves compliant requests.
 
+### 5. PBM Agent (GCP)
+
+Managed by Pharmacy Benefit Managers. It validates medication eligibility, formulary compliance, and drug-drug interactions for pharmacy attestations.
+
+### 6. Lab (Diagnostic) Agent (GCP)
+
+Provides authoritative attestations for lab results (e.g., HbA1c) and imaging reports, ensuring diagnostic evidence is cryptographically bound to patient identity.
+
+### 7. Auditor Agent (Governance)
+
+Managed by regulatory bodies like HHS-OIG. It performs real-time oversight of the attestation ledger to detect anomalies and ensure system-wide compliance.
+
+### 8. Credentialing Agent (Trust)
+
+Verifies medical practitioner licensing (NPI) to ensure all clinical attestations originate from authorized and verified healthcare professionals.
+
+### 9. Patient Empowerment Agent (Ownership)
+
+Represents the patient in the A2A mesh. It manages patient consent and provides a personal vault for all Verifiable Credentials issued about the patient.
+
+### 10. Clinical Research Agent (Innovation)
+
+Uses Gemini 1.5 Flash to autonomously match patients to high-impact clinical trials using cryptographically verified health data.
+
 ## Multi-Cloud Strategy
 
 The system is designed for maximum interoperability:
