@@ -17,9 +17,14 @@ class TrustRegistry:
             "type": "HealthcareProvider"
         },
         "did:web:payer-AETNA-1.com": {
-            "public_key": "Yndyd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndz==", # payer
+            "public_key": "YXJnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndw==", 
             "endpoint": "https://api.payer-example.com/v1/auth",
             "type": "HealthInsurer"
+        },
+        "did:web:pbm-v1.gov": {
+            "public_key": "Yndyd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndz==", 
+            "endpoint": "https://us-central1-pbm-project.cloudfunctions.net/pbm_agent",
+            "type": "PharmacyBenefitManager"
         }
     }
 

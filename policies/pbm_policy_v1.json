@@ -1,0 +1,23 @@
+{
+  "policy_id": "PBM-POLICY-SPECIALTY-DRUG-2026",
+  "title": "Specialty Medication Coverage Protocol",
+  "version": "1.0",
+  "criteria": [
+    {
+      "id": "DRUG-CRIT-001",
+      "description": "Patient must have documented failure of at least two preferred generic alternatives.",
+      "required": true
+    },
+    {
+      "id": "DRUG-CRIT-002",
+      "description": "Prescription must be from a board-certified specialist in the relevant therapeutic area.",
+      "required": true
+    },
+    {
+      "id": "DRUG-CRIT-003",
+      "description": "Diagnostic evidence supporting medical necessity (e.g., lab results) must be attached.",
+      "required": true
+    }
+  ],
+  "supported_resources": ["MedicationRequest", "Patient", "Practitioner"]
+}

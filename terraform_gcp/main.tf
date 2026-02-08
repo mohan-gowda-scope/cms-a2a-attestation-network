@@ -107,6 +107,33 @@ resource "google_storage_bucket" "claims_dropbox" {
   }
 }
 
+# --- PBM Agent Cloud Function (Phase 7) ---
+resource "google_cloudfunctions2_function" "pbm_agent" {
+  name        = "${var.project_name}-pbm"
+  location    = var.region
+  
+  build_config {
+    runtime     = "python311"
+    entry_point = "pbm_agent"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.pbm_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = "256Mi"
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
 # --- Payer Agent Cloud Function (Phase 3) ---
 resource "google_cloudfunctions2_function" "payer_agent" {
   name        = "${var.project_name}-payer"
@@ -134,11 +161,17 @@ resource "google_cloudfunctions2_function" "payer_agent" {
   }
 }
 
-# --- Zip objects (Update for Phase 3) ---
+# --- Zip objects (Update for Phase 7) ---
 resource "google_storage_bucket_object" "payer_zip" {
   name   = "payer_agent.zip"
   bucket = google_storage_bucket.function_bucket.name
   source = "${path.module}/payer_agent.zip"
+}
+
+resource "google_storage_bucket_object" "pbm_zip" {
+  name   = "pbm_agent.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "${path.module}/pbm_agent.zip"
 }
 
 # --- Update Clearinghouse ENV for Phase 3 ---
@@ -166,6 +199,7 @@ resource "google_cloudfunctions2_function" "clearinghouse" {
       GCP_PROJECT      = var.project_id
       CMS_A2A_ENDPOINT = google_cloudfunctions2_function.cms_agent.url
       PAYER_A2A_ENDPOINT = google_cloudfunctions2_function.payer_agent.url
+      PBM_A2A_ENDPOINT = google_cloudfunctions2_function.pbm_agent.url
     }
   }
 }
