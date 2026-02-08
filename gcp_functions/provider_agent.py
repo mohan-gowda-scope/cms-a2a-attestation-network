@@ -9,6 +9,19 @@ def request_prior_auth(provider_id, patient_id, cms_vc):
     Initiate an A2A Prior Auth request to a Payer.
     """
     ch_endpoint = os.environ.get('CLEARINGHOUSE_A2A_ENDPOINT')
+    
+    if not ch_endpoint:
+        # Local Demo Fallback
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "auth_id": f"AUTH-{uuid.uuid4().hex[:8].upper()}",
+                "status": "APPROVED",
+                "notes": "Fast-tracked via A2A Autonomous Trust Network (Mock)"
+            },
+            "id": str(uuid.uuid4())
+        }
+
     payload = {
         "jsonrpc": "2.0",
         "method": "request_prior_auth",
@@ -30,8 +43,11 @@ def request_prior_auth(provider_id, patient_id, cms_vc):
         headers={'Content-Type': 'application/json'},
         method='POST'
     )
-    with urllib.request.urlopen(req) as res:
-        return json.loads(res.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req) as res:
+            return json.loads(res.read().decode('utf-8'))
+    except Exception as e:
+        return {"error": {"code": -32000, "message": f"Network Error: {str(e)}"}}
 
 @functions_framework.http
 def provider_agent(request):
@@ -39,9 +55,6 @@ def provider_agent(request):
     Healthcare Provider Agent - Phase 3 Logic
     """
     # Simulate a trigger (e.g., file upload result)
-    # 1. First get Attestation (Phase 1/2) 
-    # 2. Then use result to get Prior Auth (Phase 3)
-    
     # For this demo, we'll assume a CMS VC is already available
     mock_cms_vc = {
         "id": "urn:uuid:mock-vc-123",

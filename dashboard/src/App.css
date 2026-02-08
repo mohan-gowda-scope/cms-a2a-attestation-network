@@ -11,7 +11,7 @@ body {
   background-color: var(--bg-dark);
   color: var(--text-primary);
   margin: 0;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 .app-container {
@@ -50,8 +50,8 @@ header {
   background: var(--bg-card);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .stat-label {
@@ -86,6 +86,12 @@ header {
 .agent-mini-card {
   padding: 16px;
   text-align: center;
+}
+
+.agent-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .status-row {
@@ -132,6 +138,30 @@ td {
 
 .status-compliant { color: #10b981; }
 .status-flagged { color: #ef4444; }
+
+.app-footer {
+  margin-top: 60px;
+  padding: 40px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.footer-meta {
+  margin-top: 8px;
+  opacity: 0.5;
+  font-size: 0.8rem;
+}
+
+.badge {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-blue);
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
 
 .animate-in {
   animation: fadeIn 0.6s ease-out forwards;

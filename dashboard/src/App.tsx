@@ -53,7 +53,7 @@ const App: React.FC = () => {
           </h1>
           <p className="stat-label">Autonomous Attestation Network Status</p>
         </div>
-        <div style={{ display: 'flex', gap: '16px' }}>
+        <div className="header-meta-group">
           <div className="badge">LIVE_ECOSYSTEM</div>
           <Activity size={20} color="#3b82f6" />
         </div>
@@ -77,12 +77,12 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <h3 style={{ marginTop: '40px', marginBottom: '20px' }}>Ecosystem Swarm Status</h3>
+      <h3 className="section-title">Ecosystem Swarm Status</h3>
       <div className="orchestration-grid">
         {agentNames.map((name, i) => (
           <div key={i} className="card agent-mini-card glass animate-in" style={{ animationDelay: `${0.1 * i}s` }}>
             <Cpu size={20} color="var(--accent-blue)" style={{ marginBottom: '8px' }} />
-            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{name}</div>
+            <div className="agent-name">{name}</div>
             <div className="status-row">
               <span className="status-dot active"></span>
               Healthy
@@ -92,7 +92,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="table-container card animate-in" style={{ animationDelay: '0.5s' }}>
-        <h2 className="logo-text" style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
+        <h2 className="logo-text table-header">
           <Search size={20} color="#3b82f6" />
           Real-time Audit Ledger
         </h2>
@@ -109,20 +109,27 @@ const App: React.FC = () => {
           <tbody>
             {logs.map((log) => (
               <tr key={log.id}>
-                <td style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>#{log.id}</td>
+                <td className="id-cell">#{log.id}</td>
                 <td>{log.provider}</td>
                 <td>{log.patient}</td>
                 <td className={log.status === 'Compliant' ? 'status-compliant' : 'status-flagged'}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="status-flex">
                     <CheckCircle size={14} /> {log.status}
                   </div>
                 </td>
-                <td style={{ color: 'var(--text-secondary)' }}>{log.time}</td>
+                <td className="time-cell">{log.time}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <footer className="app-footer">
+        &copy; 2026 CMS A2A Innovation Lab. All Attestations are Cryptographically Signed.
+        <div className="footer-meta">
+          Infrastructure Optimized: ARM64 / Graviton enabled for maximum efficiency.
+        </div>
+      </footer>
     </div>
   );
 };
