@@ -9,3 +9,9 @@ variable "project_name" {
   type        = string
   default     = "cms-a2a-attestation"
 }
+
+variable "cloud_provider" {
+  description = "Target cloud provider: 'aws' or 'gcp'"
+  type        = string
+  default     = "aws"
+}
