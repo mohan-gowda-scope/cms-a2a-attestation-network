@@ -1,0 +1,109 @@
+:root {
+  --bg-dark: #05070a;
+  --bg-card: rgba(13, 17, 23, 0.7);
+  --accent-cyan: #00f2ff;
+  --accent-purple: #9d00ff;
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --border-glass: rgba(255, 255, 255, 0.1);
+  --gradient-primary: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+  
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.glass {
+  background: var(--bg-card);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+}
+
+.gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.btn-primary {
+  background: var(--gradient-primary);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 242, 255, 0.3);
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+section {
+  padding: 80px 0;
+}
+
+.hero {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  background: radial-gradient(circle at 50% 50%, rgba(157, 0, 255, 0.1) 0%, transparent 50%);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.agent-card {
+  padding: 32px;
+  transition: border-color 0.3s ease;
+}
+
+.agent-card:hover {
+  border-color: var(--accent-cyan);
+}
+
+.badge {
+  background: rgba(0, 242, 255, 0.1);
+  color: var(--accent-cyan);
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}

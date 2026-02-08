@@ -7,11 +7,12 @@ from datetime import datetime
 from google.cloud import firestore
 import google.cloud.aiplatform as aiplatform
 from vertexai.generative_models import GenerativeModel, Part
-from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from shared.trust_registry import TrustRegistry
+from shared.privacy_utils import mask_phi
+from shared.crypto_utils import sign_credential
 
-# Initialize Clients (Wrapped for local orchestration/testing)
+# Initialize Clients
 try:
     db = firestore.Client()
     aiplatform.init(project=os.environ.get('GCP_PROJECT'), location='us-central1')
@@ -23,221 +24,69 @@ except Exception:
     model = None
     MOCK_GCP = True
 
-# Hardcoded Private Key for Demo (Seed)
-# Public Key matches TrustRegistry: d3Nnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jn=
+# CMS Private Key (Seed)
 PRIVATE_KEY_SEED = b"secret_seed_for_cms_agent_32_byt" 
 private_key = ed25519.Ed25519PrivateKey.from_private_bytes(PRIVATE_KEY_SEED)
 
-def mask_phi(data):
-    """
-    Mask PHI/PII before sending to AI for semantic review.
-    Ensures SSN/Full Addresses are replaced but structures remain.
-    """
-    mask_map = {
-        "SSN": "XXX-XX-XXXX",
-        "socialSecurityNumber": "XXX-XX-XXXX",
-    }
-    
-    data_str = json.dumps(data)
-    # Simple regex-less masking for common keys in this demo context
-    # In prod, use a formal NLP-based PHI scrubber
-    for key, replacement in mask_map.items():
-        if key in data_str:
-            data_str = data_str.replace(key, f"MASKED_{key}")
-            
-    return json.loads(data_str)
-
 def validate_with_vertex_ai(attestation_data, policy_data=None):
-    """
-    Use Gemini 1.5 Flash to validate healthcare attestation data against a formal policy.
-    """
     if MOCK_GCP:
-        # Simulate a policy-aware mock response
-        status = "Compliant"
-        reason = "Local Mock Validation (No Vertex AI)"
-        if policy_data and "policy_id" in policy_data:
-            reason = f"Validated against {policy_data['policy_id']} (Mock Mode)"
-        return {"status": status, "reason": reason}
+        return {"status": "Compliant", "reason": f"Validated against {policy_data.get('policy_id', 'standard')} (Mock)"}
 
-    # Construct dynamic prompt based on policy
     policy_str = json.dumps(policy_data, indent=2) if policy_data else "Standard Healthcare Guidelines"
+    prompt = f"Expert Auditor Role. Validate FHIR Bundle against POLICY: {policy_str}. DATA: {json.dumps(attestation_data)}"
     
-    prompt = f"""
-    You are an expert CMS Medical Auditor. 
-    Validate the following FHIR Bundle against the specific Coverage Policy provided below.
-    
-    POLICY:
-    {policy_str}
-    
-    DATA TO VALIDATE:
-    {json.dumps(attestation_data, indent=2)}
-    
-    Return a JSON response with 'status' (Compliant/Flagged) and 'reason'.
-    """
-    
-    if not model:
-        return {"valid": True, "reason": "Local Mock Validation (No Vertex AI)"}
-        
+    if not model: return {"valid": True, "reason": "Mock"}
     response = model.generate_content(prompt)
-    result_text = response.text
-    
     try:
-        start = result_text.find('{')
-        end = result_text.rfind('}') + 1
-        return json.loads(result_text[start:end])
-    except Exception:
-        return {"valid": False, "reason": "Failed to parse Vertex AI response"}
+        res = response.text
+        start, end = res.find('{'), res.rfind('}') + 1
+        return json.loads(res[start:end])
+    except: return {"valid": False, "reason": "Parse error"}
 
 def issue_verifiable_credential(attestation_id, tenant_id, validation):
-    """
-    Generate a W3C-compliant Verifiable Credential with real Ed25519 signature.
-    """
-    issuance_date = datetime.utcnow().isoformat() + "Z"
-    vc_id = f"urn:uuid:{attestation_id}"
-    
-    # Data to sign
-    signed_data = f"{vc_id}|{issuance_date}".encode()
-    signature = private_key.sign(signed_data)
-    signature_b64 = base64.urlsafe_b64encode(signature).decode().rstrip("=")
-    
-    vc = {
-        "@context": [
-            "https://www.w3.org/2018/credentials/v1",
-            "https://schema.org/healthcare"
-        ],
-        "id": vc_id,
+    credential = {
+        "@context": ["https://www.w3.org/2018/credentials/v1", "https://schema.org/healthcare"],
+        "id": f"urn:uuid:{attestation_id}",
         "type": ["VerifiableCredential", "HealthcareAttestationCredential"],
         "issuer": "did:web:cms.gov:agent:a2a-v1",
-        "issuanceDate": issuance_date,
         "credentialSubject": {
             "id": f"did:web:provider-{tenant_id}.com",
             "attestationType": "GCPMigrationValidation",
             "complianceStatus": "Compliant" if validation.get("valid") else "Flagged",
-            "validationReason": validation.get("reason", "GCP Automated Review")
-        },
-        "proof": {
-            "type": "Ed25519Signature2020",
-            "created": issuance_date,
-            "verificationMethod": "did:web:cms.gov:agent:a2a-v1#key-1",
-            "proofPurpose": "assertionMethod",
-            "jws": f"eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..{signature_b64}"
+            "validationReason": validation.get("reason", "Automated Review")
         }
     }
-    return vc
-
-def validate_fhir_bundle(data):
-    """
-    Enhanced structural and resource-level validation for FHIR R4 US Core.
-    """
-    fhir_bundle = data.get("fhir_bundle")
-    if not fhir_bundle:
-        return False, "Missing fhir_bundle in request params"
-    
-    if fhir_bundle.get("resourceType") != "Bundle":
-        return False, "Resource is not a FHIR Bundle"
-    
-    entries = fhir_bundle.get("entry", [])
-    if not isinstance(entries, list) or len(entries) == 0:
-        return False, "FHIR Bundle must contain at least one entry"
-    
-    # Resource Validation mapping
-    resources = {e.get("resource", {}).get("resourceType"): e.get("resource", {}) for e in entries}
-    
-    # 1. Patient Validation (US Core Basic)
-    if "Patient" in resources:
-        p = resources["Patient"]
-        required = ["identifier", "name", "gender"]
-        missing = [f for f in required if f not in p]
-        if missing:
-            return False, f"Patient resource missing US Core required fields: {', '.join(missing)}"
-            
-    # 2. Claim/Reference Validation
-    if "Claim" in resources:
-        c = resources["Claim"]
-        patient_ref = c.get("patient", {}).get("reference")
-        if patient_ref:
-            # Check if reference exists in bundle
-            ref_id = patient_ref.split("/")[-1]
-            if not any(e.get("resource", {}).get("id") == ref_id for e in entries):
-                return False, f"Broken Reference: Claim refers to Patient/{ref_id} which is not in the bundle"
-        
-    return True, "Deep structural validation passed"
+    return sign_credential(credential, private_key, "did:web:cms.gov:agent:a2a-v1#key-1")
 
 @functions_framework.http
 def cms_agent(request):
-    """
-    HTTP Cloud Function for CMS Attestation Agent
-    """
     request_json = request.get_json(silent=True)
-    if not request_json or request_json.get("jsonrpc") != "2.0":
-        return json.dumps({"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid Request"}, "id": None}), 400
-
+    if not request_json: return "Invalid Request", 400
+    
     method = request_json.get("method")
     params = request_json.get("params", {})
     request_id = request_json.get("id")
 
-    if method == "attest_healthcare_data":
-        # 0. Load Policy if specified (Simulated lookup)
+    if method == "request_attestation":
+        fhir_bundle = params.get("clinical_data")
         policy_id = params.get("policy_id")
-        policy_data = None
-        if policy_id:
-            try:
-                policy_path = f"policies/{policy_id}.json"
-                with open(policy_path, 'r') as f:
-                    policy_data = json.load(f)
-            except FileNotFoundError:
-                pass
-
-        # 1. Structural FHIR Validation
-        is_valid_fhir, fhir_error = validate_fhir_bundle(params)
-        if not is_valid_fhir:
-            return json.dumps({
-                "jsonrpc": "2.0",
-                "error": {"code": -32001, "message": f"FHIR Validation Error: {fhir_error}"},
-                "id": request_id
-            }), 400, {'Content-Type': 'application/json'}
-
+        
+        # 1. Mask PHI via shared utility
+        masked_data = mask_phi(fhir_bundle)
+        
+        # 2. Semantic Analysis
+        validation = validate_with_vertex_ai(masked_data, {"policy_id": policy_id})
+        
+        # 3. Issue Signed VC via shared utility
         attestation_id = str(uuid.uuid4())
+        vc = issue_verifiable_credential(attestation_id, params.get("tenant_id", "demo"), validation)
         
-        # 2. PII Masking before AI semantic review
-        masked_params = mask_phi(params)
-        validation = validate_with_vertex_ai(masked_params, policy_data)
-        
-        # 3. Dynamic Trust Check (DID Resolution)
-        provider_did = params.get("provider_did", "did:web:provider-PROV-EXAMPLE-1.com")
-        provider_pub_key = TrustRegistry.get_public_key(provider_did)
-        if not provider_pub_key:
-             return json.dumps({
-                "jsonrpc": "2.0",
-                "error": {"code": -32002, "message": f"Unauthorized: Provider DID {provider_did} not found in Trust Registry"},
-                "id": request_id
-            }), 401, {'Content-Type': 'application/json'}
-        tenant_id = params.get("provider_id", "unknown")
-        
-        # Generate formal W3C Verifiable Credential
-        verifiable_credential = issue_verifiable_credential(attestation_id, tenant_id, validation)
-        
-        # Save to Firestore (Multitenant Ledger)
+        # 4. Persistence
         if db:
-            doc_ref = db.collection('attestation_ledger').document(attestation_id)
-            doc_ref.set({
-                "attestation_id": attestation_id,
-                "tenant_id": tenant_id,
-                "timestamp": datetime.utcnow().isoformat(),
-                "method": method,
-                "status": verifiable_credential["credentialSubject"]["complianceStatus"],
-                "validation_result": validation,
-                "verifiable_credential": verifiable_credential
+            db.collection("attestations").document(attestation_id).set({
+                "vc": vc, "timestamp": datetime.utcnow().isoformat(), "policy": policy_id
             })
 
-        return json.dumps({
-            "jsonrpc": "2.0",
-            "result": {
-                "attestation_id": attestation_id,
-                "status": verifiable_credential["credentialSubject"]["complianceStatus"],
-                "verifiable_credential": verifiable_credential
-            },
-            "id": request_id
-        }), 200, {'Content-Type': 'application/json'}
-    
-    return json.dumps({"jsonrpc": "2.0", "error": {"code": -32601, "message": "Method not found"}, "id": request_id}), 404
+        return json.dumps({"jsonrpc": "2.0", "result": {"vc_id": vc["id"], "attestation": vc}, "id": request_id}), 200
+        
+    return "Not Found", 404

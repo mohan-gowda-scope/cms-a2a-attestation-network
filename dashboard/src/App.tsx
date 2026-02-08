@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
-import { Shield, Activity, CheckCircle, AlertTriangle, Search, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, Activity, CheckCircle, AlertTriangle, Search, Zap, Cpu } from 'lucide-react';
+import './App.css';
+
+const agentNames = [
+  "Provider Agent", "Clearinghouse", "CMS Agent", "Payer Agent",
+  "PBM Agent", "Lab Agent", "Auditor Agent", "Credentialing",
+  "Patient Proxy", "Research Agent"
+];
 
 const App: React.FC = () => {
   const [stats, setStats] = useState({
@@ -13,27 +20,25 @@ const App: React.FC = () => {
     { id: '1', provider: 'Mayo Clinic', patient: 'PAT-8822', status: 'Compliant', time: '2m ago' },
     { id: '2', provider: 'Aetna Payer', patient: 'PAT-4412', status: 'Compliant', time: '5m ago' },
     { id: '3', provider: 'CMS Direct', patient: 'PAT-9911', status: 'Flagged', time: '12m ago' },
-    { id: '4', provider: 'Stanford Health', patient: 'PAT-2233', status: 'Compliant', time: '15m ago' },
   ]);
 
-  // Phase 6: Real-time Data Streaming Simulation
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       const newLog = {
         id: Math.floor(Math.random() * 10000).toString(),
-        provider: ['Mayo Clinic', 'Aetna Payer', 'Blue Cross', 'Stanford Health', 'PBM Pharma', 'Quest Labs', 'HHS-OIG Auditor', 'NPI Verifier', 'Patient Proxy', 'Pharma Research'][Math.floor(Math.random() * 10)],
+        provider: agentNames[Math.floor(Math.random() * agentNames.length)],
         patient: `PAT-${Math.floor(Math.random() * 9000 + 1000)}`,
         status: Math.random() > 0.1 ? 'Compliant' : 'Flagged',
         time: 'just now'
       };
       
-      setLogs(prev => [newLog, ...prev.slice(0, 9)]);
+      setLogs(prev => [newLog, ...prev.slice(0, 7)]);
       setStats(prev => ({
         ...prev,
         totalAttestations: prev.totalAttestations + 1,
         lastUpdate: new Date().toLocaleTimeString()
       }));
-    }, 5000);
+    }, 4000);
     
     return () => clearInterval(interval);
   }, []);
@@ -46,10 +51,10 @@ const App: React.FC = () => {
             <Shield color="#3b82f6" size={28} />
             CMS <span className="text-accent">A2A</span> Monitoring Hub
           </h1>
-          <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Autonomous Attestation Network Status</p>
+          <p className="stat-label">Autonomous Attestation Network Status</p>
         </div>
-        <div className="header-meta">
-          <div className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>Live Simulation</div>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <div className="badge">LIVE_ECOSYSTEM</div>
           <Activity size={20} color="#3b82f6" />
         </div>
       </header>
@@ -58,68 +63,66 @@ const App: React.FC = () => {
         <div className="card animate-in" style={{ animationDelay: '0.1s' }}>
           <div className="stat-label">Total Attestations</div>
           <div className="stat-value">{stats.totalAttestations.toLocaleString()}</div>
-          <div className="stat-trend positive">
-            <Zap size={12} /> +12% from last week
-          </div>
+          <div className="stat-trend positive"><Zap size={12} /> +12% Efficiency</div>
         </div>
-
         <div className="card animate-in" style={{ animationDelay: '0.2s' }}>
           <div className="stat-label">Compliance Rate</div>
           <div className="stat-value">{stats.successRate}%</div>
-          <div className="stat-trend info">
-            Verified via Ed25519
-          </div>
+          <div className="stat-trend info">W3C VC Verified</div>
         </div>
-
         <div className="card animate-in" style={{ animationDelay: '0.3s' }}>
-          <div className="stat-label">Active Agents</div>
-          <div className="stat-value">{stats.activeAgents}</div>
-          <div className="stat-trend muted">
-            Multi-Cloud (AWS/GCP)
-          </div>
+          <div className="stat-label">Network Load</div>
+          <div className="stat-value">Low</div>
+          <div className="stat-trend muted">10 Active Swarms</div>
         </div>
       </div>
 
-      <div className="table-container card animate-in" style={{ animationDelay: '0.4s' }}>
-        <h2 className="table-header">
+      <h3 style={{ marginTop: '40px', marginBottom: '20px' }}>Ecosystem Swarm Status</h3>
+      <div className="orchestration-grid">
+        {agentNames.map((name, i) => (
+          <div key={i} className="card agent-mini-card glass animate-in" style={{ animationDelay: `${0.1 * i}s` }}>
+            <Cpu size={20} color="var(--accent-blue)" style={{ marginBottom: '8px' }} />
+            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{name}</div>
+            <div className="status-row">
+              <span className="status-dot active"></span>
+              Healthy
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="table-container card animate-in" style={{ animationDelay: '0.5s' }}>
+        <h2 className="logo-text" style={{ fontSize: '1.2rem', marginBottom: '20px' }}>
           <Search size={20} color="#3b82f6" />
-          Recent Attestation Logs
+          Real-time Audit Ledger
         </h2>
         <table>
           <thead>
             <tr>
-              <th>Request ID</th>
-              <th>Provider / Payer</th>
-              <th>Patient ID</th>
-              <th>Status</th>
-              <th>Timestamp</th>
+              <th>ID</th>
+              <th>Originating Agent</th>
+              <th>Subject</th>
+              <th>Trust Status</th>
+              <th>Time</th>
             </tr>
           </thead>
           <tbody>
             {logs.map((log) => (
               <tr key={log.id}>
-                <td className="id-cell">{log.id.padStart(4, '0')}</td>
-                <td className="provider-cell">{log.provider}</td>
+                <td style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>#{log.id}</td>
+                <td>{log.provider}</td>
                 <td>{log.patient}</td>
                 <td className={log.status === 'Compliant' ? 'status-compliant' : 'status-flagged'}>
-                  <div className="status-cell">
-                    {log.status === 'Compliant' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-                    {log.status}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CheckCircle size={14} /> {log.status}
                   </div>
                 </td>
-                <td style={{ color: '#9ca3af' }}>{log.time}</td>
+                <td style={{ color: 'var(--text-secondary)' }}>{log.time}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      <footer className="app-footer">
-        &copy; 2026 CMS A2A Innovation Lab. All Attestations are Cryptographically Signed.
-        <div style={{ marginTop: '0.5rem', opacity: 0.5 }}>
-          Infrastructure Optimized: ARM64 / Graviton enabled for maximum efficiency.
-        </div>
-      </footer>
     </div>
   );
 };
