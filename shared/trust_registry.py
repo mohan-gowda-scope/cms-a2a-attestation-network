@@ -25,6 +25,11 @@ class TrustRegistry:
             "public_key": "Yndyd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndz==", 
             "endpoint": "https://us-central1-pbm-project.cloudfunctions.net/pbm_agent",
             "type": "PharmacyBenefitManager"
+        },
+        "did:web:lab-v1.gov": {
+            "public_key": "WjNnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jndz==", 
+            "endpoint": "https://us-central1-lab-project.cloudfunctions.net/lab_agent",
+            "type": "DiagnosticLab"
         }
     }
 

@@ -5,7 +5,7 @@ const App: React.FC = () => {
   const [stats, setStats] = useState({
     totalAttestations: 1242,
     successRate: 98.4,
-    activeAgents: 5,
+    activeAgents: 6,
     lastUpdate: new Date().toLocaleTimeString()
   });
 
@@ -21,7 +21,7 @@ const App: React.FC = () => {
     const interval = setInterval(() => {
       const newLog = {
         id: Math.floor(Math.random() * 10000).toString(),
-        provider: ['Mayo Clinic', 'Aetna Payer', 'Blue Cross', 'Stanford Health', 'PBM Pharma'][Math.floor(Math.random() * 5)],
+        provider: ['Mayo Clinic', 'Aetna Payer', 'Blue Cross', 'Stanford Health', 'PBM Pharma', 'Quest Labs', 'LabCorp'][Math.floor(Math.random() * 7)],
         patient: `PAT-${Math.floor(Math.random() * 9000 + 1000)}`,
         status: Math.random() > 0.1 ? 'Compliant' : 'Flagged',
         time: 'just now'

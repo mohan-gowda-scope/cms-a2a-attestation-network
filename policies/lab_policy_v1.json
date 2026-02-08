@@ -1,0 +1,21 @@
+{
+  "policy_id": "LAB-POLICY-DIAG-2026",
+  "title": "Clinical Diagnostic & Imaging Protocol",
+  "version": "1.0",
+  "criteria": [
+    {
+      "id": "LAB-CRIT-001",
+      "description": "HbA1c results above 6.5% must be flagged for Diabetic Management review.",
+      "threshold": 6.5,
+      "resource": "Observation",
+      "code": "4548-4"
+    },
+    {
+      "id": "LAB-CRIT-002",
+      "description": "Imaging reports (DiagnosticReport) must include a conclusion section signed by a board-certified Radiologist.",
+      "required": true,
+      "resource": "DiagnosticReport"
+    }
+  ],
+  "supported_resources": ["Observation", "DiagnosticReport", "Patient"]
+}
