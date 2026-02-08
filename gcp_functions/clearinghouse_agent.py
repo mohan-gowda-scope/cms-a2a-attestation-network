@@ -7,23 +7,27 @@ from datetime import datetime
 from google.cloud import firestore
 
 # Initialize Clients
-db = firestore.Client()
+try:
+    db = firestore.Client()
+except Exception:
+    db = None
 
 def log_transaction(tenant_id, method, params, status, response):
     """
     Log transaction into the GCP Firestore multitenant ledger.
     """
     transaction_id = str(uuid.uuid4())
-    doc_ref = db.collection('attestation_ledger').document(transaction_id)
-    doc_ref.set({
-        "attestation_id": transaction_id,
-        "tenant_id": tenant_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "method": method,
-        "request_params": params,
-        "status": status,
-        "cms_response": response
-    })
+    if db:
+        doc_ref = db.collection('attestation_ledger').document(transaction_id)
+        doc_ref.set({
+            "attestation_id": transaction_id,
+            "tenant_id": tenant_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "method": method,
+            "request_params": params,
+            "status": status,
+            "cms_response": response
+        })
     return transaction_id
 
 from shared.trust_registry import TrustRegistry

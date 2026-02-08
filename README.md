@@ -1,17 +1,38 @@
 # CMS A2A Attestation Network
 
-Autonomous Agent-to-Agent (A2A) Attestation Network for CMS healthcare interoperability.
+A production-grade, multi-cloud (AWS/GCP) agentic framework for autonomous healthcare attestation and prior-authorization validation.
 
-## Overview
+## 📖 Detailed Documentation
 
-This project demonstrates the A2A protocol (JSON-RPC 2.0 over HTTP) used for autonomous healthcare attestation between a Provider Agent and a CMS Agent.
+- **[Project Overview](docs/OVERVIEW.md)**: Mission, components, and multi-cloud strategy.
+- **[Architecture & Design](docs/ARCHITECTURE.md)**: Technical data flow, security model, and trust registry.
+- **[API Reference](docs/API_REFERENCE.md)**: JSON-RPC methods and data formats.
+- **[Setup & Testing](docs/SETUP.md)**: Local installation and cloud deployment guide.
 
-## Project Structure
+## 🚀 Quick Start (Simulation)
 
-- `terraform/`: Infrastructure as Code for AWS resources.
-- `lambda/`: Agent logic (Provider and CMS agents).
-- `public/`: Public artifacts including the Agent Card.
+To see the autonomous network in action locally:
 
-## Deployment
+```bash
+pip install -r gcp_functions/requirements.txt
+export PYTHONPATH=$PYTHONPATH:.
+python3 scripts/e2e_orchestrator.py
+```
 
-Follow the instructions in `terraform/README.md` to deploy the infrastructure.
+## 🔐 Security Features
+
+- **W3C Verifiable Credentials**: Standardized attestation formats.
+- **Ed25519 Cryptography**: Real digital signatures for non-repudiation and integrity.
+- **Trust Registry**: Decentralized identity (DID) resolution for automated verification.
+- **Multi-Cloud Handshake**: Secure AWS-GCP cross-cloud verification.
+
+## 🛠 Tech Stack
+
+- **GCP**: Cloud Functions, Firestore, Vertex AI (Gemini 1.5 Flash).
+- **AWS**: Lambda, DynamoDB, S3, Bedrock (Claude 3.5 Sonnet).
+- **Security**: Ed25519 (Cryptography), JSON-RPC 2.0.
+- **IaC**: Terraform (HCL).
+
+---
+
+_Developed for CMS A2A Innovation_

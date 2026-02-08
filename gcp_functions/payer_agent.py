@@ -6,7 +6,10 @@ from datetime import datetime
 from google.cloud import firestore
 from shared.trust_registry import TrustRegistry
 
-db = firestore.Client()
+try:
+    db = firestore.Client()
+except Exception:
+    db = None
 
 def handle_prior_auth(params):
     """
@@ -23,14 +26,15 @@ def handle_prior_auth(params):
     auth_id = f"GCP-AUTH-{uuid.uuid4().hex[:8].upper()}"
     
     # Log to Payer Firestore collection
-    doc_ref = db.collection('payer_authorizations').document(auth_id)
-    doc_ref.set({
-        "auth_id": auth_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "provider_id": params.get("provider_id"),
-        "status": "Auto-Approved",
-        "vc_id": vc.get("id")
-    })
+    if db:
+        doc_ref = db.collection('payer_authorizations').document(auth_id)
+        doc_ref.set({
+            "auth_id": auth_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "provider_id": params.get("provider_id"),
+            "status": "Auto-Approved",
+            "vc_id": vc.get("id")
+        })
     
     return {
         "auth_id": auth_id,
