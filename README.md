@@ -9,14 +9,40 @@ A production-grade, multi-cloud (AWS/GCP) agentic framework for autonomous healt
 - **[API Reference](docs/API_REFERENCE.md)**: JSON-RPC methods and data formats.
 - **[Setup & Testing](docs/SETUP.md)**: Local installation and cloud deployment guide.
 
-## 🚀 Quick Start (Simulation)
+## 🧩 The 10-Agent Ecosystem
 
-To see the autonomous network in action locally:
+This project implements a decentralized healthcare mesh using the **Agent-to-Agent (A2A)** pattern:
+
+1.  **Provider Agent**: Initiates medical necessity attestations.
+2.  **Clearinghouse Agent**: The central nexus for verification and orchestration.
+3.  **CMS Agent**: Government oversight and policy enforcement.
+4.  **Payer Agent**: Automated prior authorization and claims.
+5.  **PBM Agent**: Pharmacy benefit and medication validation.
+6.  **Lab Agent**: Diagnostic and clinical evidence attestations.
+7.  **Auditor Agent**: Real-time regulatory audit of the ecosystem.
+8.  **Credentialing Agent**: Provider license (NPI) and trust verification.
+9.  **Patient Agent**: Patient data ownership and consent management.
+10. **Research Agent**: AI-driven clinical trial matching using verified data.
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- Terraform
+- GCP & AWS accounts (or LocalStack/Local Mock mode)
+
+### Installation
 
 ```bash
-pip install -r gcp_functions/requirements.txt
+pip install -r requirements.txt
+```
+
+### Running the Full Ecosystem Demo
+
+```bash
 export PYTHONPATH=$PYTHONPATH:.
-python3 scripts/e2e_orchestrator.py
+python3 scripts/test_phase10_ecosystem.py
 ```
 
 ### Simple Usage Example
