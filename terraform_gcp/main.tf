@@ -38,6 +38,9 @@ resource "google_storage_bucket" "function_bucket" {
   name     = "${var.project_id}-functions"
   location = var.region
   force_destroy = true
+
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
 }
 
 # --- IAM for AI Platform (Vertex AI) ---
@@ -88,39 +91,20 @@ resource "google_cloudfunctions2_function" "cms_agent" {
   }
 }
 
-# Clearinghouse Agent
-resource "google_cloudfunctions2_function" "clearinghouse" {
-  name        = "${var.project_name}-clearinghouse"
-  location    = var.region
-  
-  build_config {
-    runtime     = "python311"
-    entry_point = "clearinghouse_agent"
-    source {
-      storage_source {
-        bucket = google_storage_bucket.function_bucket.name
-        object = google_storage_bucket_object.ch_zip.name
-      }
-    }
-  }
-
-  service_config {
-    max_instance_count = 10
-    available_memory   = "256Mi"
-    timeout_seconds    = 60
-    service_account_email = google_service_account.function_sa.email
-    environment_variables = {
-      GCP_PROJECT      = var.project_id
-      CMS_A2A_ENDPOINT = google_cloudfunctions2_function.cms_agent.url
-    }
-  }
-}
+# Removed redundant clearinghouse resource
 
 # --- Cloud Storage for Claim Triggers (Phase 3) ---
 resource "google_storage_bucket" "claims_dropbox" {
   name     = "${var.project_id}-claims-dropbox"
   location = var.region
   force_destroy = true
+  
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  
+  versioning {
+    enabled = true
+  }
 }
 
 # --- Payer Agent Cloud Function (Phase 3) ---

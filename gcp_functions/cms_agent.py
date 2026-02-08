@@ -91,6 +91,22 @@ def issue_verifiable_credential(attestation_id, tenant_id, validation):
     }
     return vc
 
+def validate_fhir_bundle(data):
+    """
+    Strict structural validation for FHIR R4 Bundle.
+    """
+    fhir_bundle = data.get("fhir_bundle")
+    if not fhir_bundle:
+        return False, "Missing fhir_bundle in request params"
+    
+    if fhir_bundle.get("resourceType") != "Bundle":
+        return False, "Resource is not a FHIR Bundle"
+    
+    if "entry" not in fhir_bundle or not isinstance(fhir_bundle["entry"], list):
+        return False, "FHIR Bundle must contain an 'entry' list"
+        
+    return True, "Structural validation passed"
+
 @functions_framework.http
 def cms_agent(request):
     """
@@ -105,6 +121,15 @@ def cms_agent(request):
     request_id = request_json.get("id")
 
     if method == "attest_healthcare_data":
+        # 1. Strict FHIR Structural Validation
+        is_valid_fhir, fhir_error = validate_fhir_bundle(params)
+        if not is_valid_fhir:
+            return json.dumps({
+                "jsonrpc": "2.0",
+                "error": {"code": -32001, "message": f"FHIR Validation Error: {fhir_error}"},
+                "id": request_id
+            }), 400
+
         attestation_id = str(uuid.uuid4())
         validation = validate_with_vertex_ai(params)
         tenant_id = params.get("provider_id", "unknown")

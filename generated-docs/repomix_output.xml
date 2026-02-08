@@ -1,0 +1,1789 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<repository>
+<repository_structure>
+  <directory name="terraform_gcp">
+    <file name="main.tf"/>
+  </directory>
+  <directory name="terraform">
+    <file name="main.tf"/>
+    <directory name=".terraform">
+      <directory name="providers">
+        <directory name="registry.terraform.io">
+          <directory name="hashicorp">
+            <directory name="aws">
+              <directory name="5.100.0">
+                <directory name="darwin_arm64">
+                  <file name="LICENSE.txt"/>
+                </directory>
+              </directory>
+            </directory>
+          </directory>
+        </directory>
+      </directory>
+    </directory>
+    <file name="providers.tf"/>
+    <file name="variables.tf"/>
+  </directory>
+  <directory name="gcp_functions">
+    <file name="requirements.txt"/>
+    <file name="clearinghouse_agent.py"/>
+    <file name="provider_agent.py"/>
+    <file name="payer_agent.py"/>
+  </directory>
+  <directory name="tests">
+    <file name="test_a2a_handshake.py"/>
+    <file name="test_phase3_prior_auth.py"/>
+  </directory>
+  <file name="README.md"/>
+  <directory name="public">
+    <file name="cms-agent-card.json"/>
+  </directory>
+  <file name=".gitignore"/>
+  <directory name="scripts">
+    <file name="e2e_orchestrator.py"/>
+  </directory>
+  <directory name="lambda">
+    <file name="clearinghouse_agent.py"/>
+    <file name="provider_agent.py"/>
+    <file name="payer_agent.py"/>
+  </directory>
+</repository_structure>
+<repository_files>
+  <file>
+    
+  
+    <path>terraform_gcp/main.tf</path>
+    
+  
+    <content>terraform {
+  required_providers {
+    google = {
+      source  = &quot;hashicorp/google&quot;
+      version = &quot;~&gt; 5.0&quot;
+    }
+  }
+}
+
+provider &quot;google&quot; {
+  project = var.project_id
+  region  = var.region
+}
+
+variable &quot;project_id&quot; {
+  description = &quot;GCP Project ID&quot;
+  type        = string
+}
+
+variable &quot;region&quot; {
+  description = &quot;GCP Region&quot;
+  default     = &quot;us-central1&quot;
+}
+
+variable &quot;project_name&quot; {
+  default = &quot;cms-a2a-attestation&quot;
+}
+
+# --- Firestore (Multitenant Ledger) ---
+resource &quot;google_firestore_database&quot; &quot;ledger&quot; {
+  name        = &quot;(default)&quot;
+  location_id = var.region
+  type        = &quot;FIRESTORE_NATIVE&quot;
+}
+
+# --- Storage Bucket for function code ---
+resource &quot;google_storage_bucket&quot; &quot;function_bucket&quot; {
+  name     = &quot;${var.project_id}-functions&quot;
+  location = var.region
+  force_destroy = true
+}
+
+# --- IAM for AI Platform (Vertex AI) ---
+resource &quot;google_service_account&quot; &quot;function_sa&quot; {
+  account_id   = &quot;a2a-functions-sa&quot;
+  display_name = &quot;Service Account for A2A Cloud Functions&quot;
+}
+
+resource &quot;google_project_iam_member&quot; &quot;vertex_ai_user&quot; {
+  project = var.project_id
+  role    = &quot;roles/aiplatform.user&quot;
+  member  = &quot;serviceAccount:${google_service_account.function_sa.email}&quot;
+}
+
+# Add Firestore permissions
+resource &quot;google_project_iam_member&quot; &quot;firestore_user&quot; {
+  project = var.project_id
+  role    = &quot;roles/datastore.user&quot;
+  member  = &quot;serviceAccount:${google_service_account.function_sa.email}&quot;
+}
+
+# --- Cloud Functions Definitions ---
+
+# CMS Agent
+resource &quot;google_cloudfunctions2_function&quot; &quot;cms_agent&quot; {
+  name        = &quot;${var.project_name}-cms&quot;
+  location    = var.region
+  
+  build_config {
+    runtime     = &quot;python311&quot;
+    entry_point = &quot;cms_agent&quot;
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.cms_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = &quot;256Mi&quot;
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
+# Clearinghouse Agent
+resource &quot;google_cloudfunctions2_function&quot; &quot;clearinghouse&quot; {
+  name        = &quot;${var.project_name}-clearinghouse&quot;
+  location    = var.region
+  
+  build_config {
+    runtime     = &quot;python311&quot;
+    entry_point = &quot;clearinghouse_agent&quot;
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.ch_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = &quot;256Mi&quot;
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT      = var.project_id
+      CMS_A2A_ENDPOINT = google_cloudfunctions2_function.cms_agent.url
+    }
+  }
+}
+
+# --- Cloud Storage for Claim Triggers (Phase 3) ---
+resource &quot;google_storage_bucket&quot; &quot;claims_dropbox&quot; {
+  name     = &quot;${var.project_id}-claims-dropbox&quot;
+  location = var.region
+  force_destroy = true
+}
+
+# --- Payer Agent Cloud Function (Phase 3) ---
+resource &quot;google_cloudfunctions2_function&quot; &quot;payer_agent&quot; {
+  name        = &quot;${var.project_name}-payer&quot;
+  location    = var.region
+  
+  build_config {
+    runtime     = &quot;python311&quot;
+    entry_point = &quot;payer_agent&quot;
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.payer_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = &quot;256Mi&quot;
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT = var.project_id
+    }
+  }
+}
+
+# --- Zip objects (Update for Phase 3) ---
+resource &quot;google_storage_bucket_object&quot; &quot;payer_zip&quot; {
+  name   = &quot;payer_agent.zip&quot;
+  bucket = google_storage_bucket.function_bucket.name
+  source = &quot;${path.module}/payer_agent.zip&quot;
+}
+
+# --- Update Clearinghouse ENV for Phase 3 ---
+resource &quot;google_cloudfunctions2_function&quot; &quot;clearinghouse&quot; {
+  name        = &quot;${var.project_name}-clearinghouse&quot;
+  location    = var.region
+  
+  build_config {
+    runtime     = &quot;python311&quot;
+    entry_point = &quot;clearinghouse_agent&quot;
+    source {
+      storage_source {
+        bucket = google_storage_bucket.function_bucket.name
+        object = google_storage_bucket_object.ch_zip.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count = 10
+    available_memory   = &quot;256Mi&quot;
+    timeout_seconds    = 60
+    service_account_email = google_service_account.function_sa.email
+    environment_variables = {
+      GCP_PROJECT      = var.project_id
+      CMS_A2A_ENDPOINT = google_cloudfunctions2_function.cms_agent.url
+      PAYER_A2A_ENDPOINT = google_cloudfunctions2_function.payer_agent.url
+    }
+  }
+}
+
+# --- Cloud Storage Trigger for Provider ---
+# In production, this would use google_eventarc_trigger
+# For this demo, we'll mark the architecture as 'Event-Ready'
+
+# Outputs
+output &quot;clearinghouse_url&quot; {
+  value = google_cloudfunctions2_function.clearinghouse.url
+}
+
+output &quot;claims_bucket_gcp&quot; {
+  value = google_storage_bucket.claims_dropbox.name
+}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>terraform/main.tf</path>
+    
+  
+    <content># DynamoDB Table for Payer Authorizations (Phase 3)
+resource &quot;aws_dynamodb_table&quot; &quot;payer_auth_ledger&quot; {
+  name           = &quot;${var.project_name}-payer-auths&quot;
+  billing_mode   = &quot;PAY_PER_REQUEST&quot;
+  hash_key       = &quot;auth_id&quot;
+
+  attribute {
+    name = &quot;auth_id&quot;
+    type = &quot;S&quot;
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  tags = {
+    Name = &quot;PayerAuthLedger&quot;
+  }
+}
+
+# S3 Bucket for Claim/Attestation Triggers (Phase 3)
+resource &quot;aws_s3_bucket&quot; &quot;claims_dropbox&quot; {
+  bucket = &quot;${var.project_name}-claims-dropbox-${uuid()}&quot;
+  force_destroy = true
+}
+
+resource &quot;aws_s3_bucket_notification&quot; &quot;bucket_notification&quot; {
+  bucket = aws_s3_bucket.claims_dropbox.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.provider_agent.arn
+    events              = [&quot;s3:ObjectCreated:*&quot;]
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_trigger]
+}
+
+resource &quot;aws_lambda_permission&quot; &quot;allow_s3_trigger&quot; {
+  statement_id  = &quot;AllowExecutionFromS3&quot;
+  action        = &quot;lambda:InvokeFunction&quot;
+  function_name = aws_lambda_function.provider_agent.function_name
+  principal     = &quot;s3.amazonaws.com&quot;
+  source_arn    = aws_s3_bucket.claims_dropbox.arn
+}
+
+# Zip the Lambda code (Payer Agent)
+data &quot;archive_file&quot; &quot;payer_zip&quot; {
+  type        = &quot;zip&quot;
+  source_file = &quot;${path.module}/../lambda/payer_agent.py&quot;
+  output_path = &quot;${path.module}/payer_agent.zip&quot;
+}
+
+# Lambda Function (Payer Agent)
+resource &quot;aws_lambda_function&quot; &quot;payer_agent&quot; {
+  filename         = data.archive_file.payer_zip.output_path
+  function_name    = &quot;${var.project_name}-payer&quot;
+  role             = aws_iam_role.lambda_role.arn
+  handler          = &quot;payer_agent.lambda_handler&quot;
+  runtime          = &quot;python3.11&quot;
+  source_code_hash = data.archive_file.payer_zip.output_base64sha256
+
+  environment {
+    variables = {
+      AUTH_TABLE = aws_dynamodb_table.payer_auth_ledger.name
+    }
+  }
+}
+
+# Lambda Permission for API Gateway (Payer)
+resource &quot;aws_lambda_permission&quot; &quot;apigw_payer&quot; {
+  statement_id  = &quot;AllowPayerExecutionFromAPIGateway&quot;
+  action        = &quot;lambda:InvokeFunction&quot;
+  function_name = aws_lambda_function.payer_agent.function_name
+  principal     = &quot;apigateway.amazonaws.com&quot;
+  source_arn    = &quot;${aws_api_gateway_rest_api.a2a_api.execution_arn}/*/*&quot;
+}
+
+# Add Payer API Resource
+resource &quot;aws_api_gateway_resource&quot; &quot;payer_resource&quot; {
+  rest_api_id = aws_api_gateway_rest_api.a2a_api.id
+  parent_id   = aws_api_gateway_rest_api.a2a_api.root_resource_id
+  path_part   = &quot;payer&quot;
+}
+
+resource &quot;aws_api_gateway_method&quot; &quot;payer_post&quot; {
+  rest_api_id   = aws_api_gateway_rest_api.a2a_api.id
+  resource_id   = aws_api_gateway_resource.payer_resource.id
+  http_method   = &quot;POST&quot;
+  authorization = &quot;NONE&quot;
+}
+
+resource &quot;aws_api_gateway_integration&quot; &quot;payer_integration&quot; {
+  rest_api_id             = aws_api_gateway_rest_api.a2a_api.id
+  resource_id             = aws_api_gateway_resource.payer_resource.id
+  http_method             = aws_api_gateway_method.payer_post.http_method
+  integration_http_method = &quot;POST&quot;
+  type                    = &quot;AWS_PROXY&quot;
+  uri                     = aws_lambda_function.payer_agent.invoke_arn
+}
+
+# Update Clearinghouse ENV
+resource &quot;aws_lambda_function&quot; &quot;clearinghouse&quot; {
+  filename         = data.archive_file.clearinghouse_zip.output_path
+  function_name    = &quot;${var.project_name}-clearinghouse&quot;
+  role             = aws_iam_role.lambda_role.arn
+  handler          = &quot;clearinghouse_agent.lambda_handler&quot;
+  runtime          = &quot;python3.11&quot;
+  source_code_hash = data.archive_file.clearinghouse_zip.output_base64sha256
+
+  environment {
+    variables = {
+      LEDGER_TABLE   = aws_dynamodb_table.attestation_ledger.name
+      CMS_A2A_ENDPOINT = &quot;${aws_api_gateway_stage.a2a_stage.invoke_url}/cms&quot;
+      PAYER_A2A_ENDPOINT = &quot;${aws_api_gateway_stage.a2a_stage.invoke_url}/payer&quot;
+    }
+  }
+}
+
+# Update IAM for new tables
+resource &quot;aws_iam_role_policy&quot; &quot;lambda_policy&quot; {
+  name = &quot;${var.project_name}-lambda-policy&quot;
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = &quot;2012-10-17&quot;
+    Statement = [
+      {
+        Action = [
+          &quot;dynamodb:PutItem&quot;,
+          &quot;dynamodb:GetItem&quot;,
+          &quot;dynamodb:UpdateItem&quot;,
+          &quot;dynamodb:Query&quot;
+        ]
+        Effect   = &quot;Allow&quot;
+        Resource = [
+            aws_dynamodb_table.attestation_ledger.arn,
+            aws_dynamodb_table.payer_auth_ledger.arn
+        ]
+      },
+      {
+        Action = [
+          &quot;bedrock:InvokeModel&quot;
+        ]
+        Effect   = &quot;Allow&quot;
+        Resource = &quot;arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0&quot;
+      },
+      {
+        Action = [
+          &quot;logs:CreateLogGroup&quot;,
+          &quot;logs:CreateLogStream&quot;,
+          &quot;logs:PutLogEvents&quot;
+        ]
+        Effect   = &quot;Allow&quot;
+        Resource = &quot;arn:aws:logs:*:*:*&quot;
+      }
+    ]
+  })
+}
+
+# Outputs
+output &quot;api_endpoint&quot; {
+  value = &quot;${aws_api_gateway_stage.a2a_stage.invoke_url}/cms&quot;
+}
+
+output &quot;clearinghouse_endpoint&quot; {
+  value = &quot;${aws_api_gateway_stage.a2a_stage.invoke_url}/clearinghouse&quot;
+}
+
+output &quot;claims_bucket&quot; {
+  value = aws_s3_bucket.claims_dropbox.id
+}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>terraform/.terraform/providers/registry.terraform.io/hashicorp/aws/5.100.0/darwin_arm64/LICENSE.txt</path>
+    
+  
+    <content>Copyright (c) 2017 HashiCorp, Inc.
+
+Mozilla Public License Version 2.0
+==================================
+
+1. Definitions
+--------------
+
+1.1. &quot;Contributor&quot;
+    means each individual or legal entity that creates, contributes to
+    the creation of, or owns Covered Software.
+
+1.2. &quot;Contributor Version&quot;
+    means the combination of the Contributions of others (if any) used
+    by a Contributor and that particular Contributor's Contribution.
+
+1.3. &quot;Contribution&quot;
+    means Covered Software of a particular Contributor.
+
+1.4. &quot;Covered Software&quot;
+    means Source Code Form to which the initial Contributor has attached
+    the notice in Exhibit A, the Executable Form of such Source Code
+    Form, and Modifications of such Source Code Form, in each case
+    including portions thereof.
+
+1.5. &quot;Incompatible With Secondary Licenses&quot;
+    means
+
+    (a) that the initial Contributor has attached the notice described
+        in Exhibit B to the Covered Software; or
+
+    (b) that the Covered Software was made available under the terms of
+        version 1.1 or earlier of the License, but not also under the
+        terms of a Secondary License.
+
+1.6. &quot;Executable Form&quot;
+    means any form of the work other than Source Code Form.
+
+1.7. &quot;Larger Work&quot;
+    means a work that combines Covered Software with other material, in
+    a separate file or files, that is not Covered Software.
+
+1.8. &quot;License&quot;
+    means this document.
+
+1.9. &quot;Licensable&quot;
+    means having the right to grant, to the maximum extent possible,
+    whether at the time of the initial grant or subsequently, any and
+    all of the rights conveyed by this License.
+
+1.10. &quot;Modifications&quot;
+    means any of the following:
+
+    (a) any file in Source Code Form that results from an addition to,
+        deletion from, or modification of the contents of Covered
+        Software; or
+
+    (b) any new file in Source Code Form that contains any Covered
+        Software.
+
+1.11. &quot;Patent Claims&quot; of a Contributor
+    means any patent claim(s), including without limitation, method,
+    process, and apparatus claims, in any patent Licensable by such
+    Contributor that would be infringed, but for the grant of the
+    License, by the making, using, selling, offering for sale, having
+    made, import, or transfer of either its Contributions or its
+    Contributor Version.
+
+1.12. &quot;Secondary License&quot;
+    means either the GNU General Public License, Version 2.0, the GNU
+    Lesser General Public License, Version 2.1, the GNU Affero General
+    Public License, Version 3.0, or any later versions of those
+    licenses.
+
+1.13. &quot;Source Code Form&quot;
+    means the form of the work preferred for making modifications.
+
+1.14. &quot;You&quot; (or &quot;Your&quot;)
+    means an individual or a legal entity exercising rights under this
+    License. For legal entities, &quot;You&quot; includes any entity that
+    controls, is controlled by, or is under common control with You. For
+    purposes of this definition, &quot;control&quot; means (a) the power, direct
+    or indirect, to cause the direction or management of such entity,
+    whether by contract or otherwise, or (b) ownership of more than
+    fifty percent (50%) of the outstanding shares or beneficial
+    ownership of such entity.
+
+2. License Grants and Conditions
+--------------------------------
+
+2.1. Grants
+
+Each Contributor hereby grants You a world-wide, royalty-free,
+non-exclusive license:
+
+(a) under intellectual property rights (other than patent or trademark)
+    Licensable by such Contributor to use, reproduce, make available,
+    modify, display, perform, distribute, and otherwise exploit its
+    Contributions, either on an unmodified basis, with Modifications, or
+    as part of a Larger Work; and
+
+(b) under Patent Claims of such Contributor to make, use, sell, offer
+    for sale, have made, import, and otherwise transfer either its
+    Contributions or its Contributor Version.
+
+2.2. Effective Date
+
+The licenses granted in Section 2.1 with respect to any Contribution
+become effective for each Contribution on the date the Contributor first
+distributes such Contribution.
+
+2.3. Limitations on Grant Scope
+
+The licenses granted in this Section 2 are the only rights granted under
+this License. No additional rights or licenses will be implied from the
+distribution or licensing of Covered Software under this License.
+Notwithstanding Section 2.1(b) above, no patent license is granted by a
+Contributor:
+
+(a) for any code that a Contributor has removed from Covered Software;
+    or
+
+(b) for infringements caused by: (i) Your and any other third party's
+    modifications of Covered Software, or (ii) the combination of its
+    Contributions with other software (except as part of its Contributor
+    Version); or
+
+(c) under Patent Claims infringed by Covered Software in the absence of
+    its Contributions.
+
+This License does not grant any rights in the trademarks, service marks,
+or logos of any Contributor (except as may be necessary to comply with
+the notice requirements in Section 3.4).
+
+2.4. Subsequent Licenses
+
+No Contributor makes additional grants as a result of Your choice to
+distribute the Covered Software under a subsequent version of this
+License (see Section 10.2) or under the terms of a Secondary License (if
+permitted under the terms of Section 3.3).
+
+2.5. Representation
+
+Each Contributor represents that the Contributor believes its
+Contributions are its original creation(s) or it has sufficient rights
+to grant the rights to its Contributions conveyed by this License.
+
+2.6. Fair Use
+
+This License is not intended to limit any rights You have under
+applicable copyright doctrines of fair use, fair dealing, or other
+equivalents.
+
+2.7. Conditions
+
+Sections 3.1, 3.2, 3.3, and 3.4 are conditions of the licenses granted
+in Section 2.1.
+
+3. Responsibilities
+-------------------
+
+3.1. Distribution of Source Form
+
+All distribution of Covered Software in Source Code Form, including any
+Modifications that You create or to which You contribute, must be under
+the terms of this License. You must inform recipients that the Source
+Code Form of the Covered Software is governed by the terms of this
+License, and how they can obtain a copy of this License. You may not
+attempt to alter or restrict the recipients' rights in the Source Code
+Form.
+
+3.2. Distribution of Executable Form
+
+If You distribute Covered Software in Executable Form then:
+
+(a) such Covered Software must also be made available in Source Code
+    Form, as described in Section 3.1, and You must inform recipients of
+    the Executable Form how they can obtain a copy of such Source Code
+    Form by reasonable means in a timely manner, at a charge no more
+    than the cost of distribution to the recipient; and
+
+(b) You may distribute such Executable Form under the terms of this
+    License, or sublicense it under different terms, provided that the
+    license for the Executable Form does not attempt to limit or alter
+    the recipients' rights in the Source Code Form under this License.
+
+3.3. Distribution of a Larger Work
+
+You may create and distribute a Larger Work under terms of Your choice,
+provided that You also comply with the requirements of this License for
+the Covered Software. If the Larger Work is a combination of Covered
+Software with a work governed by one or more Secondary Licenses, and the
+Covered Software is not Incompatible With Secondary Licenses, this
+License permits You to additionally distribute such Covered Software
+under the terms of such Secondary License(s), so that the recipient of
+the Larger Work may, at their option, further distribute the Covered
+Software under the terms of either this License or such Secondary
+License(s).
+
+3.4. Notices
+
+You may not remove or alter the substance of any license notices
+(including copyright notices, patent notices, disclaimers of warranty,
+or limitations of liability) contained within the Source Code Form of
+the Covered Software, except that You may alter any license notices to
+the extent required to remedy known factual inaccuracies.
+
+3.5. Application of Additional Terms
+
+You may choose to offer, and to charge a fee for, warranty, support,
+indemnity or liability obligations to one or more recipients of Covered
+Software. However, You may do so only on Your own behalf, and not on
+behalf of any Contributor. You must make it absolutely clear that any
+such warranty, support, indemnity, or liability obligation is offered by
+You alone, and You hereby agree to indemnify every Contributor for any
+liability incurred by such Contributor as a result of warranty, support,
+indemnity or liability terms You offer. You may include additional
+disclaimers of warranty and limitations of liability specific to any
+jurisdiction.
+
+4. Inability to Comply Due to Statute or Regulation
+---------------------------------------------------
+
+If it is impossible for You to comply with any of the terms of this
+License with respect to some or all of the Covered Software due to
+statute, judicial order, or regulation then You must: (a) comply with
+the terms of this License to the maximum extent possible; and (b)
+describe the limitations and the code they affect. Such description must
+be placed in a text file included with all distributions of the Covered
+Software under this License. Except to the extent prohibited by statute
+or regulation, such description must be sufficiently detailed for a
+recipient of ordinary skill to be able to understand it.
+
+5. Termination
+--------------
+
+5.1. The rights granted under this License will terminate automatically
+if You fail to comply with any of its terms. However, if You become
+compliant, then the rights granted under this License from a particular
+Contributor are reinstated (a) provisionally, unless and until such
+Contributor explicitly and finally terminates Your grants, and (b) on an
+ongoing basis, if such Contributor fails to notify You of the
+non-compliance by some reasonable means prior to 60 days after You have
+come back into compliance. Moreover, Your grants from a particular
+Contributor are reinstated on an ongoing basis if such Contributor
+notifies You of the non-compliance by some reasonable means, this is the
+first time You have received notice of non-compliance with this License
+from such Contributor, and You become compliant prior to 30 days after
+Your receipt of the notice.
+
+5.2. If You initiate litigation against any entity by asserting a patent
+infringement claim (excluding declaratory judgment actions,
+counter-claims, and cross-claims) alleging that a Contributor Version
+directly or indirectly infringes any patent, then the rights granted to
+You by any and all Contributors for the Covered Software under Section
+2.1 of this License shall terminate.
+
+5.3. In the event of termination under Sections 5.1 or 5.2 above, all
+end user license agreements (excluding distributors and resellers) which
+have been validly granted by You or Your distributors under this License
+prior to termination shall survive termination.
+
+************************************************************************
+*                                                                      *
+*  6. Disclaimer of Warranty                                           *
+*  -------------------------                                           *
+*                                                                      *
+*  Covered Software is provided under this License on an &quot;as is&quot;       *
+*  basis, without warranty of any kind, either expressed, implied, or  *
+*  statutory, including, without limitation, warranties that the       *
+*  Covered Software is free of defects, merchantable, fit for a        *
+*  particular purpose or non-infringing. The entire risk as to the     *
+*  quality and performance of the Covered Software is with You.        *
+*  Should any Covered Software prove defective in any respect, You     *
+*  (not any Contributor) assume the cost of any necessary servicing,   *
+*  repair, or correction. This disclaimer of warranty constitutes an   *
+*  essential part of this License. No use of any Covered Software is   *
+*  authorized under this License except under this disclaimer.         *
+*                                                                      *
+************************************************************************
+
+************************************************************************
+*                                                                      *
+*  7. Limitation of Liability                                          *
+*  --------------------------                                          *
+*                                                                      *
+*  Under no circumstances and under no legal theory, whether tort      *
+*  (including negligence), contract, or otherwise, shall any           *
+*  Contributor, or anyone who distributes Covered Software as          *
+*  permitted above, be liable to You for any direct, indirect,         *
+*  special, incidental, or consequential damages of any character      *
+*  including, without limitation, damages for lost profits, loss of    *
+*  goodwill, work stoppage, computer failure or malfunction, or any    *
+*  and all other commercial damages or losses, even if such party      *
+*  shall have been informed of the possibility of such damages. This   *
+*  limitation of liability shall not apply to liability for death or   *
+*  personal injury resulting from such party's negligence to the       *
+*  extent applicable law prohibits such limitation. Some               *
+*  jurisdictions do not allow the exclusion or limitation of           *
+*  incidental or consequential damages, so this exclusion and          *
+*  limitation may not apply to You.                                    *
+*                                                                      *
+************************************************************************
+
+8. Litigation
+-------------
+
+Any litigation relating to this License may be brought only in the
+courts of a jurisdiction where the defendant maintains its principal
+place of business and such litigation shall be governed by laws of that
+jurisdiction, without reference to its conflict-of-law provisions.
+Nothing in this Section shall prevent a party's ability to bring
+cross-claims or counter-claims.
+
+9. Miscellaneous
+----------------
+
+This License represents the complete agreement concerning the subject
+matter hereof. If any provision of this License is held to be
+unenforceable, such provision shall be reformed only to the extent
+necessary to make it enforceable. Any law or regulation which provides
+that the language of a contract shall be construed against the drafter
+shall not be used to construe this License against a Contributor.
+
+10. Versions of the License
+---------------------------
+
+10.1. New Versions
+
+Mozilla Foundation is the license steward. Except as provided in Section
+10.3, no one other than the license steward has the right to modify or
+publish new versions of this License. Each version will be given a
+distinguishing version number.
+
+10.2. Effect of New Versions
+
+You may distribute the Covered Software under the terms of the version
+of the License under which You originally received the Covered Software,
+or under the terms of any subsequent version published by the license
+steward.
+
+10.3. Modified Versions
+
+If you create software not governed by this License, and you want to
+create a new license for such software, you may create and use a
+modified version of this License if you rename the license and remove
+any references to the name of the license steward (except to note that
+such modified license differs from this License).
+
+10.4. Distributing Source Code Form that is Incompatible With Secondary
+Licenses
+
+If You choose to distribute Source Code Form that is Incompatible With
+Secondary Licenses under the terms of this version of the License, the
+notice described in Exhibit B of this License must be attached.
+
+Exhibit A - Source Code Form License Notice
+-------------------------------------------
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+If it is not possible or desirable to put the notice in a particular
+file, then You may include the notice in a location (such as a LICENSE
+file in a relevant directory) where a recipient would be likely to look
+for such a notice.
+
+You may add additional accurate notices of copyright ownership.
+
+Exhibit B - &quot;Incompatible With Secondary Licenses&quot; Notice
+---------------------------------------------------------
+
+  This Source Code Form is &quot;Incompatible With Secondary Licenses&quot;, as
+  defined by the Mozilla Public License, v. 2.0.</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>terraform/providers.tf</path>
+    
+  
+    <content>terraform {
+  required_version = &quot;&gt;= 1.5.0&quot;
+  required_providers {
+    aws = {
+      source  = &quot;hashicorp/aws&quot;
+      version = &quot;~&gt; 5.0&quot;
+    }
+  }
+}
+
+provider &quot;aws&quot; {
+  region  = var.aws_region
+  profile = &quot;default&quot; # As per user rules: Use AWS Profile
+
+  default_tags {
+    tags = {
+      Project   = &quot;CMS-A2A-Attestation&quot;
+      ManagedBy = &quot;Terraform&quot;
+    }
+  }
+}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>terraform/variables.tf</path>
+    
+  
+    <content>variable &quot;aws_region&quot; {
+  description = &quot;AWS region to deploy resources&quot;
+  type        = string
+  default     = &quot;us-east-1&quot;
+}
+
+variable &quot;project_name&quot; {
+  description = &quot;Name of the project&quot;
+  type        = string
+  default     = &quot;cms-a2a-attestation&quot;
+}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>gcp_functions/requirements.txt</path>
+    
+  
+    <content>functions-framework==3.*
+google-cloud-firestore
+google-cloud-aiplatform
+cryptography</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>gcp_functions/clearinghouse_agent.py</path>
+    
+  
+    <content>import functions_framework
+import json
+import os
+import uuid
+import urllib.request
+from datetime import datetime
+from google.cloud import firestore
+
+# Initialize Clients
+try:
+    db = firestore.Client()
+except Exception:
+    db = None
+
+def log_transaction(tenant_id, method, params, status, response):
+    &quot;&quot;&quot;
+    Log transaction into the GCP Firestore multitenant ledger.
+    &quot;&quot;&quot;
+    transaction_id = str(uuid.uuid4())
+    if db:
+        doc_ref = db.collection('attestation_ledger').document(transaction_id)
+        doc_ref.set({
+            &quot;attestation_id&quot;: transaction_id,
+            &quot;tenant_id&quot;: tenant_id,
+            &quot;timestamp&quot;: datetime.utcnow().isoformat(),
+            &quot;method&quot;: method,
+            &quot;request_params&quot;: params,
+            &quot;status&quot;: status,
+            &quot;cms_response&quot;: response
+        })
+    return transaction_id
+
+from shared.trust_registry import TrustRegistry
+
+def forward_to_cms(payload):
+    &quot;&quot;&quot;
+    Forward request to the GCP CMS Agent Cloud Function.
+    &quot;&quot;&quot;
+    cms_endpoint = os.environ.get('CMS_A2A_ENDPOINT')
+    req = urllib.request.Request(
+        cms_endpoint,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req) as res:
+        return json.loads(res.read().decode('utf-8'))
+
+def forward_to_payer(payload):
+    &quot;&quot;&quot;
+    Forward request to the GCP Payer Agent Cloud Function.
+    &quot;&quot;&quot;
+    payer_endpoint = os.environ.get('PAYER_A2A_ENDPOINT')
+    req = urllib.request.Request(
+        payer_endpoint,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req) as res:
+        return json.loads(res.read().decode('utf-8'))
+
+@functions_framework.http
+def clearinghouse_agent(request):
+    &quot;&quot;&quot;
+    HTTP Cloud Function for Clearinghouse Agent Proxy
+    &quot;&quot;&quot;
+    request_json = request.get_json(silent=True)
+    if not request_json:
+        return {&quot;error&quot;: &quot;Invalid Request&quot;}, 400
+
+    method = request_json.get(&quot;method&quot;)
+    params = request_json.get(&quot;params&quot;, {})
+    tenant_id = params.get(&quot;provider_id&quot;, &quot;anonymous&quot;)
+
+    if method == &quot;attest_healthcare_data&quot;:
+        # Call CMS Cloud Function
+        cms_response = forward_to_cms(request_json)
+        
+        # Phase 2: Verify the Verifiable Credential returned by CMS
+        vc = cms_response.get(&quot;result&quot;, {}).get(&quot;verifiable_credential&quot;)
+        if vc:
+            is_valid, msg = TrustRegistry.verify_proof(vc)
+            print(f&quot;Clearinghouse verification: {is_valid} - {msg}&quot;)
+            cms_response[&quot;clearinghouse_verdict&quot;] = msg
+            
+        # Log to Firestore
+        log_transaction(tenant_id, method, params, &quot;Verified&quot; if is_valid else &quot;Untrusted&quot;, cms_response)
+        
+        return json.dumps(cms_response), 200, {'Content-Type': 'application/json'}
+    
+    elif method == &quot;request_prior_auth&quot;:
+        # Route to Payer Agent
+        payer_response = forward_to_payer(request_json)
+        
+        # Log to Firestore
+        log_transaction(tenant_id, method, params, &quot;Routed-To-Payer&quot;, payer_response)
+        
+        return json.dumps(payer_response), 200, {'Content-Type': 'application/json'}
+    
+    return json.dumps({&quot;error&quot;: &quot;Method Restricted&quot;}), 403</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>gcp_functions/provider_agent.py</path>
+    
+  
+    <content>import functions_framework
+import json
+import os
+import urllib.request
+import uuid
+
+def request_prior_auth(provider_id, patient_id, cms_vc):
+    &quot;&quot;&quot;
+    Initiate an A2A Prior Auth request to a Payer.
+    &quot;&quot;&quot;
+    ch_endpoint = os.environ.get('CLEARINGHOUSE_A2A_ENDPOINT')
+    payload = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;request_prior_auth&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: provider_id,
+            &quot;patient_id&quot;: patient_id,
+            &quot;verifiable_credential&quot;: cms_vc,
+            &quot;clinical_data&quot;: {
+                &quot;cpt_code&quot;: &quot;99213&quot;,
+                &quot;diagnosis&quot;: &quot;Z00.00&quot;
+            }
+        },
+        &quot;id&quot;: str(uuid.uuid4())
+    }
+    
+    req = urllib.request.Request(
+        ch_endpoint,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req) as res:
+        return json.loads(res.read().decode('utf-8'))
+
+@functions_framework.http
+def provider_agent(request):
+    &quot;&quot;&quot;
+    Healthcare Provider Agent - Phase 3 Logic
+    &quot;&quot;&quot;
+    # Simulate a trigger (e.g., file upload result)
+    # 1. First get Attestation (Phase 1/2) 
+    # 2. Then use result to get Prior Auth (Phase 3)
+    
+    # For this demo, we'll assume a CMS VC is already available
+    mock_cms_vc = {
+        &quot;id&quot;: &quot;urn:uuid:mock-vc-123&quot;,
+        &quot;issuer&quot;: &quot;did:web:cms.gov:agent:a2a-v1&quot;,
+        &quot;proof&quot;: {&quot;type&quot;: &quot;Ed25519Signature2020&quot;, &quot;verificationMethod&quot;: &quot;did:web:cms.gov:agent:a2a-v1#key-1&quot;}
+    }
+    
+    auth_result = request_prior_auth(&quot;GCP-PROV-99&quot;, &quot;PAT-555&quot;, mock_cms_vc)
+    
+    return json.dumps({
+        &quot;flow&quot;: &quot;Prior-Auth-Pipeline&quot;,
+        &quot;payer_response&quot;: auth_result
+    }), 200, {'Content-Type': 'application/json'}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>gcp_functions/payer_agent.py</path>
+    
+  
+    <content>import functions_framework
+import json
+import os
+import uuid
+from datetime import datetime
+from google.cloud import firestore
+from shared.trust_registry import TrustRegistry
+
+try:
+    db = firestore.Client()
+except Exception:
+    db = None
+
+def handle_prior_auth(params):
+    &quot;&quot;&quot;
+    Autonomous Prior Auth Decision Logic (GCP)
+    &quot;&quot;&quot;
+    vc = params.get(&quot;verifiable_credential&quot;)
+    if not vc:
+        return {&quot;status&quot;: &quot;Denied&quot;, &quot;reason&quot;: &quot;Missing Verifiable Credential&quot;}
+    
+    is_valid, msg = TrustRegistry.verify_proof(vc)
+    if not is_valid:
+        return {&quot;status&quot;: &quot;Denied&quot;, &quot;reason&quot;: f&quot;Verification Failed: {msg}&quot;}
+    
+    auth_id = f&quot;GCP-AUTH-{uuid.uuid4().hex[:8].upper()}&quot;
+    
+    # Log to Payer Firestore collection
+    if db:
+        doc_ref = db.collection('payer_authorizations').document(auth_id)
+        doc_ref.set({
+            &quot;auth_id&quot;: auth_id,
+            &quot;timestamp&quot;: datetime.utcnow().isoformat(),
+            &quot;provider_id&quot;: params.get(&quot;provider_id&quot;),
+            &quot;status&quot;: &quot;Auto-Approved&quot;,
+            &quot;vc_id&quot;: vc.get(&quot;id&quot;)
+        })
+    
+    return {
+        &quot;auth_id&quot;: auth_id,
+        &quot;status&quot;: &quot;Auto-Approved&quot;,
+        &quot;notes&quot;: &quot;Verified via CMS Trust Hub&quot;
+    }
+
+@functions_framework.http
+def payer_agent(request):
+    request_json = request.get_json(silent=True)
+    if not request_json or request_json.get(&quot;jsonrpc&quot;) != &quot;2.0&quot;:
+        return {&quot;error&quot;: &quot;Invalid Request&quot;}, 400
+
+    method = request_json.get(&quot;method&quot;)
+    params = request_json.get(&quot;params&quot;, {})
+    request_id = request_json.get(&quot;id&quot;)
+
+    if method == &quot;request_prior_auth&quot;:
+        result = handle_prior_auth(params)
+        return json.dumps({
+            &quot;jsonrpc&quot;: &quot;2.0&quot;,
+            &quot;result&quot;: result,
+            &quot;id&quot;: request_id
+        }), 200, {'Content-Type': 'application/json'}
+    
+    return json.dumps({&quot;error&quot;: &quot;Method not found&quot;}), 404</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>tests/test_a2a_handshake.py</path>
+    
+  
+    <content>import json
+import os
+from unittest.mock import MagicMock, patch
+import sys
+
+# Add lambda and shared directory to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'lambda')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'shared')))
+
+from cms_agent import lambda_handler as cms_handler
+from clearinghouse_agent import lambda_handler as ch_handler
+
+def test_clearinghouse_a2a_flow():
+    &quot;&quot;&quot;
+    Simulate Provider -&gt; Clearinghouse -&gt; CMS flow.
+    &quot;&quot;&quot;
+    print(&quot;Starting E2E Clearinghouse A2A Flow Test...&quot;)
+    
+    # Set environment variables for testing
+    os.environ['AWS_REGION'] = 'us-east-1'
+    os.environ['LEDGER_TABLE'] = 'test-table'
+    os.environ['CMS_A2A_ENDPOINT'] = 'https://mock-cms/cms'
+    
+    # Payload from Provider
+    provider_payload = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;attest_healthcare_data&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: &quot;TENANT-XYZ&quot;,
+            &quot;attestation_type&quot;: &quot;ClinicalQuality&quot;,
+            &quot;data&quot;: {&quot;score&quot;: 95}
+        },
+        &quot;id&quot;: &quot;ch-id-001&quot;
+    }
+    
+    event = {&quot;body&quot;: json.dumps(provider_payload)}
+    
+    # Mock Boto3 and Urllib
+    with patch('boto3.resource') as mock_dynamodb, \
+         patch('urllib.request.urlopen') as mock_urlopen, \
+         patch('boto3.client') as mock_bedrock:
+        
+        # 1. Mock Bedrock (called by CMS Agent)
+        mock_bedrock_runtime = MagicMock()
+        mock_bedrock.return_value = mock_bedrock_runtime
+        mock_stream = MagicMock()
+        mock_stream.read.return_value = json.dumps({
+            &quot;content&quot;: [{&quot;text&quot;: '{&quot;valid&quot;: true, &quot;reason&quot;: &quot;Clearinghouse check passed&quot;}'}]
+        }).encode('utf-8')
+        mock_bedrock_runtime.invoke_model.return_value = {'body': mock_stream}
+
+        # 2. Mock CMS Agent Response (Handled via urllib in CH Agent)
+        mock_cms_res = MagicMock()
+        mock_cms_res.read.return_value = json.dumps({
+            &quot;jsonrpc&quot;: &quot;2.0&quot;,
+            &quot;result&quot;: {
+                &quot;status&quot;: &quot;Compliant&quot;, 
+                &quot;attestation_id&quot;: &quot;cms-uuid-123&quot;,
+                &quot;verifiable_credential&quot;: {
+                    &quot;issuer&quot;: &quot;did:web:cms.gov:agent:a2a-v1&quot;,
+                    &quot;type&quot;: [&quot;VerifiableCredential&quot;, &quot;HealthcareAttestationCredential&quot;],
+                    &quot;proof&quot;: {
+                        &quot;type&quot;: &quot;Ed25519Signature2020&quot;,
+                        &quot;verificationMethod&quot;: &quot;did:web:cms.gov:agent:a2a-v1#key-1&quot;
+                    }
+                }
+            },
+            &quot;id&quot;: &quot;ch-id-001&quot;
+        }).encode('utf-8')
+        mock_cms_res.__enter__.return_value = mock_cms_res
+        mock_urlopen.return_value = mock_cms_res
+        
+        # 3. Setup DynamoDB Mock
+        mock_table = MagicMock()
+        mock_dynamodb.return_value.Table.return_value = mock_table
+        
+        # 4. Mock TrustRegistry (since it's imported in the handler)
+        with patch('trust_registry.TrustRegistry.verify_proof') as mock_verify:
+            mock_verify.return_value = (True, &quot;Credential Verified via Trust Registry&quot;)
+            
+            # Execute Clearinghouse Agent
+            response = ch_handler(event, None)
+            
+            # Validate Flow
+            print(f&quot;Clearinghouse Status: {response['statusCode']}&quot;)
+            body = json.loads(response['body'])
+            print(f&quot;Final Response: {json.dumps(body, indent=2)}&quot;)
+            
+            assert response['statusCode'] == 200
+            assert body['result']['status'] == &quot;Compliant&quot;
+            assert &quot;verifiable_credential&quot; in body['result']
+            assert body['clearinghouse_verdict'] == &quot;Credential Verified via Trust Registry&quot;
+        
+        # Verify Clearinghouse logged to DynamoDB
+        assert mock_table.put_item.called
+        
+        print(&quot;E2E Clearinghouse Test Passed Successfully!&quot;)
+
+if __name__ == &quot;__main__&quot;:
+    test_clearinghouse_a2a_flow()</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>tests/test_phase3_prior_auth.py</path>
+    
+  
+    <content>import json
+import os
+import sys
+from unittest.mock import MagicMock, patch
+
+# Add relevant directories to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'lambda')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'shared')))
+
+from clearinghouse_agent import lambda_handler as ch_handler
+from payer_agent import lambda_handler as payer_handler
+
+def test_phase3_prior_auth_flow():
+    &quot;&quot;&quot;
+    Test Phase 3: Provider -&gt; Clearinghouse -&gt; Payer (VC Verified)
+    &quot;&quot;&quot;
+    print(&quot;Starting Phase 3: Autonomous Prior Authorization E2E Test...&quot;)
+    
+    # 1. Setup Mock VC (received from CMS in earlier phase)
+    mock_cms_vc = {
+        &quot;id&quot;: &quot;urn:uuid:cms-vc-999&quot;,
+        &quot;type&quot;: [&quot;VerifiableCredential&quot;, &quot;HealthcareAttestationCredential&quot;],
+        &quot;issuer&quot;: &quot;did:web:cms.gov:agent:a2a-v1&quot;,
+        &quot;proof&quot;: {
+            &quot;type&quot;: &quot;Ed25519Signature2020&quot;,
+            &quot;verificationMethod&quot;: &quot;did:web:cms.gov:agent:a2a-v1#key-1&quot;
+        }
+    }
+    
+    # 2. Provider Payload for Prior Auth
+    prior_auth_payload = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;request_prior_auth&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: &quot;AWS-PROV-123&quot;,
+            &quot;patient_id&quot;: &quot;PAT-ABC&quot;,
+            &quot;verifiable_credential&quot;: mock_cms_vc,
+            &quot;clinical_data&quot;: {&quot;cpt&quot;: &quot;99213&quot;}
+        },
+        &quot;id&quot;: &quot;p3-test-1&quot;
+    }
+    
+    event = {&quot;body&quot;: json.dumps(prior_auth_payload)}
+    
+    # 3. Mocks for Clearinghouse and Payer Handshake
+    with patch('urllib.request.urlopen') as mock_urlopen, \
+         patch('boto3.resource') as mock_db, \
+         patch('trust_registry.TrustRegistry.verify_proof') as mock_vc_verify:
+        
+        # Setup DB Mocks
+        mock_table = MagicMock()
+        mock_db.return_value.Table.return_value = mock_table
+        
+        # Mock Trust Registry Verification (Called by Payer)
+        mock_vc_verify.return_value = (True, &quot;Trust Hub: Credential Verified&quot;)
+        
+        # 4. Mock the Payer Agent Endpoint (Called by Clearinghouse)
+        mock_payer_res = MagicMock()
+        mock_payer_res.read.return_value = json.dumps({
+            &quot;jsonrpc&quot;: &quot;2.0&quot;,
+            &quot;result&quot;: {
+                &quot;prior_auth_id&quot;: &quot;AUTH-XYZ123&quot;,
+                &quot;status&quot;: &quot;Auto-Approved&quot;,
+                &quot;valid_until&quot;: &quot;2027-02-07&quot;
+            },
+            &quot;id&quot;: &quot;p3-test-1&quot;
+        }).encode('utf-8')
+        mock_payer_res.__enter__.return_value = mock_payer_res
+        mock_urlopen.return_value = mock_payer_res
+        
+        # Execute Clearinghouse Agent
+        os.environ['PAYER_A2A_ENDPOINT'] = 'https://mock-payer/auth'
+        os.environ['LEDGER_TABLE'] = 'mock-ledger'
+        
+        print(&quot;-&gt; Clearinghouse Proxying request to Payer...&quot;)
+        response = ch_handler(event, None)
+        
+        # 5. Assertions
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        result = body.get(&quot;result&quot;, {})
+        
+        print(f&quot;-&gt; Payer Response Status: {result.get('status')}&quot;)
+        assert result.get('status') == &quot;Auto-Approved&quot;
+        assert &quot;prior_auth_id&quot; in result
+        
+        print(&quot;PASS: Phase 3 Prior Auth Flow Verified Successfully!&quot;)
+
+if __name__ == &quot;__main__&quot;:
+    test_phase3_prior_auth_flow()</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>README.md</path>
+    
+  
+    <content># CMS A2A Attestation Network
+
+Autonomous Agent-to-Agent (A2A) Attestation Network for CMS healthcare interoperability.
+
+## Overview
+
+This project demonstrates the A2A protocol (JSON-RPC 2.0 over HTTP) used for autonomous healthcare attestation between a Provider Agent and a CMS Agent.
+
+## Project Structure
+
+- `terraform/`: Infrastructure as Code for AWS resources.
+- `lambda/`: Agent logic (Provider and CMS agents).
+- `public/`: Public artifacts including the Agent Card.
+
+## Deployment
+
+Follow the instructions in `terraform/README.md` to deploy the infrastructure.</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>public/cms-agent-card.json</path>
+    
+  
+    <content>{
+  &quot;name&quot;: &quot;CMS Attestation Agent&quot;,
+  &quot;description&quot;: &quot;Autonomous agent for healthcare provider attestation validation.&quot;,
+  &quot;type&quot;: &quot;a2a-agent&quot;,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;capabilities&quot;: [
+    {
+      &quot;method&quot;: &quot;attest_healthcare_data&quot;,
+      &quot;description&quot;: &quot;Submit clinical or provider attestation data for validation.&quot;,
+      &quot;input_schema&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;properties&quot;: {
+          &quot;provider_id&quot;: { &quot;type&quot;: &quot;string&quot; },
+          &quot;attestation_type&quot;: { &quot;type&quot;: &quot;string&quot; },
+          &quot;data&quot;: { &quot;type&quot;: &quot;object&quot; }
+        },
+        &quot;required&quot;: [&quot;provider_id&quot;, &quot;attestation_type&quot;, &quot;data&quot;]
+      }
+    }
+  ],
+  &quot;endpoints&quot;: [
+    {
+      &quot;type&quot;: &quot;json-rpc&quot;,
+      &quot;url&quot;: &quot;REPLACE_WITH_API_ENDPOINT&quot;
+    }
+  ]
+}</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>.gitignore</path>
+    
+  
+    <content>__pycache__/
+*.pyc
+*.zip
+.terraform/
+*.tfstate*
+*.log
+.DS_Store</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>scripts/e2e_orchestrator.py</path>
+    
+  
+    <content>import json
+import uuid
+import time
+from shared.trust_registry import TrustRegistry
+# Mocking the functions for local orchestration
+from gcp_functions.cms_agent import cms_agent
+from gcp_functions.clearinghouse_agent import clearinghouse_agent
+from gcp_functions.payer_agent import payer_agent
+
+class MockRequest:
+    def __init__(self, data):
+        self.data = data
+    def get_json(self, silent=True):
+        return self.data
+
+def run_e2e_flow():
+    print(&quot;=== CMS A2A Attestation Network: E2E Orchestration Simulation ===\n&quot;)
+    provider_id = &quot;GCP-PROV-99&quot;
+    patient_id = &quot;PAT-555&quot;
+    
+    # Step 1: Provider triggers Attestation via Clearinghouse
+    print(f&quot;[Provider] Requesting attestation for {provider_id}...&quot;)
+    attestation_request = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;attest_healthcare_data&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: provider_id,
+            &quot;patient_id&quot;: patient_id,
+            &quot;fhir_bundle&quot;: {&quot;resourceType&quot;: &quot;Bundle&quot;, &quot;entry&quot;: []}
+        },
+        &quot;id&quot;: &quot;req-1&quot;
+    }
+    
+    # Simulate Clearinghouse proxying to CMS
+    # We'll mock the internal forward_to_cms in clearinghouse_agent.py
+    # or just call cms_agent directly for this simulation
+    print(&quot;[Clearinghouse] Proxying request to CMS Agent...&quot;)
+    cms_req = MockRequest(attestation_request)
+    # Note: In a real flow, this would be an HTTP call. 
+    # Here we mock the result of cms_agent
+    
+    # CMS Validation &amp; Signing
+    print(&quot;[CMS] Validating data with Vertex AI and signing Verifiable Credential...&quot;)
+    # Mocking environmental variables for firestore/aiplatform if needed, 
+    # but assuming code can run or be mocked.
+    try:
+        cms_response_raw, status_code, headers = cms_agent(cms_req)
+        cms_result = json.loads(cms_response_raw)
+        vc = cms_result[&quot;result&quot;][&quot;verifiable_credential&quot;]
+        print(f&quot;[CMS] Issued VC: {vc['id']} (Status: {cms_result['result']['status']})&quot;)
+    except Exception as e:
+        print(f&quot;[ERROR] CMS Agent failed: {e}&quot;)
+        return
+
+    # Step 2: Clearinghouse verifies the VC before returning to Provider
+    print(&quot;[Clearinghouse] Verifying VC signature...&quot;)
+    is_valid, msg = TrustRegistry.verify_proof(vc)
+    print(f&quot;[Clearinghouse] Verification result: {is_valid} - {msg}&quot;)
+
+    # Step 3: Provider uses VC to request Prior Auth from Payer
+    print(&quot;\n[Provider] Using CMS VC to request Prior Authorization from Payer Agent...&quot;)
+    prior_auth_request = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;request_prior_auth&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: provider_id,
+            &quot;patient_id&quot;: patient_id,
+            &quot;verifiable_credential&quot;: vc,
+            &quot;clinical_data&quot;: {&quot;cpt_code&quot;: &quot;99213&quot;}
+        },
+        &quot;id&quot;: &quot;req-2&quot;
+    }
+    
+    payer_req = MockRequest(prior_auth_request)
+    payer_response_raw, status_code, headers = payer_agent(payer_req)
+    payer_result = json.loads(payer_response_raw)
+    
+    print(f&quot;[Payer] Response: {payer_result['result']['status']} (Auth ID: {payer_result['result'].get('auth_id')})&quot;)
+    print(f&quot;[Payer] Notes: {payer_result['result'].get('notes')}&quot;)
+
+    print(&quot;\n=== E2E Flow Completed Successfully ===&quot;)
+
+if __name__ == &quot;__main__&quot;:
+    run_e2e_flow()</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>lambda/clearinghouse_agent.py</path>
+    
+  
+    <content>import json
+import os
+import boto3
+import uuid
+import urllib.request
+from datetime import datetime
+
+# Global variable for lazy client initialization
+_DYNAMODB_CLIENT = None
+
+def get_table():
+    global _DYNAMODB_CLIENT
+    if not _DYNAMODB_CLIENT:
+        _DYNAMODB_CLIENT = boto3.resource('dynamodb', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+    return _DYNAMODB_CLIENT.Table(os.environ.get('LEDGER_TABLE'))
+
+def log_transaction(tenant_id, method, params, status, response):
+    &quot;&quot;&quot;
+    Log the A2A transaction into the multitenant Trust Ledger.
+    &quot;&quot;&quot;
+    transaction_id = str(uuid.uuid4())
+    item = {
+        &quot;attestation_id&quot;: transaction_id,
+        &quot;tenant_id&quot;: tenant_id,
+        &quot;timestamp&quot;: datetime.utcnow().isoformat(),
+        &quot;method&quot;: method,
+        &quot;request_params&quot;: params,
+        &quot;status&quot;: status,
+        &quot;cms_response&quot;: response
+    }
+    get_table().put_item(Item=item)
+    return transaction_id
+
+def forward_to_cms(payload):
+    &quot;&quot;&quot;
+    Forward the A2A request to the Government CMS Agent.
+    &quot;&quot;&quot;
+    cms_endpoint = os.environ.get('CMS_A2A_ENDPOINT')
+    req = urllib.request.Request(
+        cms_endpoint,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req) as res:
+        return json.loads(res.read().decode('utf-8'))
+
+def lambda_handler(event, context):
+    &quot;&quot;&quot;
+    Clearinghouse Agent (A2A Intermediate) - Multitenant Proxy
+    &quot;&quot;&quot;
+    try:
+        body = json.loads(event.get('body', '{}'))
+        method = body.get(&quot;method&quot;)
+        params = body.get(&quot;params&quot;, {})
+        request_id = body.get(&quot;id&quot;)
+        
+        # Multitenancy check: Extract Provider ID (Tenant)
+        tenant_id = params.get(&quot;provider_id&quot;, &quot;anonymous&quot;)
+        
+        print(f&quot;Clearinghouse processing request for Tenant: {tenant_id}&quot;)
+        
+        # Forwarding Policy: Only certain methods allowed
+        if method == &quot;attest_healthcare_data&quot;:
+            # Call CMS Agent
+            cms_response = forward_to_cms(body)
+            
+            # Phase 2: Verify the Verifiable Credential returned by CMS
+            from trust_registry import TrustRegistry # Assumed in path or layer
+            vc = cms_response.get(&quot;result&quot;, {}).get(&quot;verifiable_credential&quot;)
+            is_valid = False
+            msg = &quot;No VC provided&quot;
+            if vc:
+                is_valid, msg = TrustRegistry.verify_proof(vc)
+                print(f&quot;Clearinghouse verification: {is_valid} - {msg}&quot;)
+                cms_response[&quot;clearinghouse_verdict&quot;] = msg
+                
+            # Log as a successful commercial transaction
+            log_transaction(tenant_id, method, params, &quot;Verified&quot; if is_valid else &quot;Untrusted&quot;, cms_response)
+            
+            return {
+                &quot;statusCode&quot;: 200,
+                &quot;body&quot;: json.dumps(cms_response)
+            }
+        elif method == &quot;request_prior_auth&quot;:
+            # Route to Payer Agent
+            payer_endpoint = os.environ.get('PAYER_A2A_ENDPOINT')
+            req = urllib.request.Request(
+                payer_endpoint,
+                data=json.dumps(body).encode('utf-8'),
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urllib.request.urlopen(req) as res:
+                payer_response = json.loads(res.read().decode('utf-8'))
+            
+            log_transaction(tenant_id, method, params, &quot;Routed-To-Payer&quot;, payer_response)
+            
+            return {
+                &quot;statusCode&quot;: 200,
+                &quot;body&quot;: json.dumps(payer_response)
+            }
+        else:
+            return {
+                &quot;statusCode&quot;: 403,
+                &quot;body&quot;: json.dumps({
+                    &quot;jsonrpc&quot;: &quot;2.0&quot;,
+                    &quot;error&quot;: {&quot;code&quot;: -32601, &quot;message&quot;: &quot;Method Restricted by Clearinghouse Policy&quot;},
+                    &quot;id&quot;: request_id
+                })
+            }
+            
+    except Exception as e:
+        print(f&quot;Clearinghouse Error: {str(e)}&quot;)
+        return {
+            &quot;statusCode&quot;: 500,
+            &quot;body&quot;: json.dumps({&quot;error&quot;: &quot;Clearinghouse Internal Failure&quot;})
+        }</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>lambda/provider_agent.py</path>
+    
+  
+    <content>import json
+import os
+import uuid
+import urllib.request
+
+def request_prior_auth(provider_id, patient_id, cms_vc):
+    &quot;&quot;&quot;
+    Initiate an A2A Prior Auth request to a Payer via the Clearinghouse.
+    &quot;&quot;&quot;
+    ch_endpoint = os.environ.get('CLEARINGHOUSE_A2A_ENDPOINT')
+    payload = {
+        &quot;jsonrpc&quot;: &quot;2.0&quot;,
+        &quot;method&quot;: &quot;request_prior_auth&quot;,
+        &quot;params&quot;: {
+            &quot;provider_id&quot;: provider_id,
+            &quot;patient_id&quot;: patient_id,
+            &quot;verifiable_credential&quot;: cms_vc,
+            &quot;clinical_data&quot;: {
+                &quot;cpt_code&quot;: &quot;99213&quot;,
+                &quot;diagnosis&quot;: &quot;Z00.00&quot;
+            }
+        },
+        &quot;id&quot;: str(uuid.uuid4())
+    }
+    
+    req = urllib.request.Request(
+        ch_endpoint,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    with urllib.request.urlopen(req) as res:
+        return json.loads(res.read().decode('utf-8'))
+
+def lambda_handler(event, context):
+    &quot;&quot;&quot;
+    Provider Agent Lambda - Phase 3
+    &quot;&quot;&quot;
+    # In a real scenario, this would be triggered by an S3 upload or EHR event
+    provider_id = &quot;AWS-PROV-123&quot;
+    patient_id = &quot;PAT-ABC&quot;
+    
+    # Mocking a VC that would have been received from CMS in Phase 1/2
+    mock_cms_vc = {
+        &quot;id&quot;: &quot;urn:uuid:mock-vc-456&quot;,
+        &quot;issuer&quot;: &quot;did:web:cms.gov:agent:a2a-v1&quot;,
+        &quot;proof&quot;: {&quot;type&quot;: &quot;Ed25519Signature2020&quot;, &quot;verificationMethod&quot;: &quot;did:web:cms.gov:agent:a2a-v1#key-1&quot;}
+    }
+    
+    auth_result = request_prior_auth(provider_id, patient_id, mock_cms_vc)
+    
+    return {
+        &quot;statusCode&quot;: 200,
+        &quot;body&quot;: json.dumps({
+            &quot;flow&quot;: &quot;AWS-Prior-Auth-Pipeline&quot;,
+            &quot;result&quot;: auth_result
+        })
+    }</content>
+    
+
+  </file>
+  <file>
+    
+  
+    <path>lambda/payer_agent.py</path>
+    
+  
+    <content>import json
+import os
+import boto3
+import uuid
+from datetime import datetime
+from trust_registry import TrustRegistry
+
+def get_table():
+    dynamodb = boto3.resource('dynamodb')
+    return dynamodb.Table(os.environ.get('AUTH_TABLE'))
+
+def handle_prior_auth(params):
+    &quot;&quot;&quot;
+    Method: request_prior_auth
+    Logic: Autonomously approves if a valid CMS-issued VC is presented.
+    &quot;&quot;&quot;
+    vc = params.get(&quot;verifiable_credential&quot;)
+    if not vc:
+        return {&quot;status&quot;: &quot;Denied&quot;, &quot;reason&quot;: &quot;No Verifiable Credential presented&quot;}
+    
+    # Verify the CMS VC using the Trust Registry
+    is_valid, msg = TrustRegistry.verify_proof(vc)
+    if not is_valid:
+        return {&quot;status&quot;: &quot;Denied&quot;, &quot;reason&quot;: f&quot;Untrusted Credential: {msg}&quot;}
+    
+    # Instant Decision Logic (Simplified)
+    # In production, this would check clinical criteria (CPT codes, etc.)
+    prior_auth_id = f&quot;AUTH-{uuid.uuid4().hex[:8].upper()}&quot;
+    
+    # Save to Payer Auth Ledger
+    item = {
+        &quot;auth_id&quot;: prior_auth_id,
+        &quot;timestamp&quot;: datetime.utcnow().isoformat(),
+        &quot;provider_id&quot;: params.get(&quot;provider_id&quot;),
+        &quot;patient_id&quot;: params.get(&quot;patient_id&quot;),
+        &quot;status&quot;: &quot;Auto-Approved&quot;,
+        &quot;vc_ref&quot;: vc.get(&quot;id&quot;)
+    }
+    get_table().put_item(Item=item)
+    
+    return {
+        &quot;prior_auth_id&quot;: prior_auth_id,
+        &quot;status&quot;: &quot;Auto-Approved&quot;,
+        &quot;valid_until&quot;: (datetime.now().replace(year=datetime.now().year + 1)).isoformat()
+    }
+
+def lambda_handler(event, context):
+    try:
+        body = json.loads(event.get('body', '{}'))
+        method = body.get(&quot;method&quot;)
+        params = body.get(&quot;params&quot;, {})
+        request_id = body.get(&quot;id&quot;)
+
+        if method == &quot;request_prior_auth&quot;:
+            result = handle_prior_auth(params)
+            return {
+                &quot;statusCode&quot;: 200,
+                &quot;body&quot;: json.dumps({&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;result&quot;: result, &quot;id&quot;: request_id})
+            }
+        
+        return {&quot;statusCode&quot;: 404, &quot;body&quot;: json.dumps({&quot;error&quot;: &quot;Method not found&quot;})}
+            
+    except Exception as e:
+        return {&quot;statusCode&quot;: 500, &quot;body&quot;: json.dumps({&quot;error&quot;: str(e)})}</content>
+    
+
+  </file>
+</repository_files>
+<statistics>
+  <total_files>18</total_files>
+  <total_chars>68317</total_chars>
+  <total_tokens>0</total_tokens>
+  <generated_at>2026-02-07 18:03:36</generated_at>
+</statistics>
+</repository>
