@@ -5,22 +5,26 @@ import uuid
 import base64
 from datetime import datetime
 from google.cloud import firestore
-from google.cloud import aiplatform
+import google.cloud.aiplatform as aiplatform
 from vertexai.generative_models import GenerativeModel, Part
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import ed25519
+from shared.trust_registry import TrustRegistry
 
 # Initialize Clients (Wrapped for local orchestration/testing)
 try:
     db = firestore.Client()
     aiplatform.init(project=os.environ.get('GCP_PROJECT'), location='us-central1')
     model = GenerativeModel("gemini-1.5-flash-001")
+    MOCK_GCP = False
 except Exception:
     print("Warning: GCP Clients not initialized. Using mocks for local execution.")
     db = None
     model = None
+    MOCK_GCP = True
 
 # Hardcoded Private Key for Demo (Seed)
-# Public Key matches TrustRegistry: d3Nnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jn=
+# Public Key matches TrustRegistry: d3Nnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jnd3Jn=
 PRIVATE_KEY_SEED = b"secret_seed_for_cms_agent_32_byt" 
 private_key = ed25519.Ed25519PrivateKey.from_private_bytes(PRIVATE_KEY_SEED)
 
@@ -43,21 +47,32 @@ def mask_phi(data):
             
     return json.loads(data_str)
 
-def validate_with_vertex_ai(attestation_data):
+def validate_with_vertex_ai(attestation_data, policy_data=None):
     """
-    Use Gemini 1.5 Flash to validate healthcare attestation data.
+    Use Gemini 1.5 Flash to validate healthcare attestation data against a formal policy.
     """
-    prompt = f"""
-    You are a CMS Compliance Validator. Review the following healthcare attestation data for semantic correctness and FHIR alignment.
+    if MOCK_GCP:
+        # Simulate a policy-aware mock response
+        status = "Compliant"
+        reason = "Local Mock Validation (No Vertex AI)"
+        if policy_data and "policy_id" in policy_data:
+            reason = f"Validated against {policy_data['policy_id']} (Mock Mode)"
+        return {"status": status, "reason": reason}
+
+    # Construct dynamic prompt based on policy
+    policy_str = json.dumps(policy_data, indent=2) if policy_data else "Standard Healthcare Guidelines"
     
-    Data:
+    prompt = f"""
+    You are an expert CMS Medical Auditor. 
+    Validate the following FHIR Bundle against the specific Coverage Policy provided below.
+    
+    POLICY:
+    {policy_str}
+    
+    DATA TO VALIDATE:
     {json.dumps(attestation_data, indent=2)}
     
-    Respond in JSON format:
-    {{
-        "valid": true/false,
-        "reason": "Detailed explanation of finding"
-    }}
+    Return a JSON response with 'status' (Compliant/Flagged) and 'reason'.
     """
     
     if not model:
@@ -162,7 +177,18 @@ def cms_agent(request):
     request_id = request_json.get("id")
 
     if method == "attest_healthcare_data":
-        # 1. Strict FHIR Structural Validation
+        # 0. Load Policy if specified (Simulated lookup)
+        policy_id = params.get("policy_id")
+        policy_data = None
+        if policy_id:
+            try:
+                policy_path = f"policies/{policy_id}.json"
+                with open(policy_path, 'r') as f:
+                    policy_data = json.load(f)
+            except FileNotFoundError:
+                pass
+
+        # 1. Structural FHIR Validation
         is_valid_fhir, fhir_error = validate_fhir_bundle(params)
         if not is_valid_fhir:
             return json.dumps({
@@ -175,7 +201,17 @@ def cms_agent(request):
         
         # 2. PII Masking before AI semantic review
         masked_params = mask_phi(params)
-        validation = validate_with_vertex_ai(masked_params)
+        validation = validate_with_vertex_ai(masked_params, policy_data)
+        
+        # 3. Dynamic Trust Check (DID Resolution)
+        provider_did = params.get("provider_did", "did:web:provider-PROV-EXAMPLE-1.com")
+        provider_pub_key = TrustRegistry.get_public_key(provider_did)
+        if not provider_pub_key:
+             return json.dumps({
+                "jsonrpc": "2.0",
+                "error": {"code": -32002, "message": f"Unauthorized: Provider DID {provider_did} not found in Trust Registry"},
+                "id": request_id
+            }), 401, {'Content-Type': 'application/json'}
         tenant_id = params.get("provider_id", "unknown")
         
         # Generate formal W3C Verifiable Credential

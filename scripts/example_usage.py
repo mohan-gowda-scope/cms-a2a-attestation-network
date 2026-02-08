@@ -46,12 +46,14 @@ def example_request_attestation():
         ]
     }
 
-    # 2. Construct the JSON-RPC Request
+    # 2. Construct the JSON-RPC Request with Phase 6 features
     request_data = {
         "jsonrpc": "2.0",
         "method": "attest_healthcare_data",
         "params": {
             "provider_id": "PROV-EXAMPLE-1",
+            "provider_did": "did:web:provider-PROV-EXAMPLE-1.com",
+            "policy_id": "hip_replacement_v1",
             "patient_id": "PAT-123",
             "fhir_bundle": fhir_bundle
         },

@@ -2,19 +2,41 @@ import React, { useState } from 'react';
 import { Shield, Activity, CheckCircle, AlertTriangle, Search, Zap } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [stats] = useState({
+  const [stats, setStats] = useState({
     totalAttestations: 1242,
     successRate: 98.4,
     activeAgents: 4,
     lastUpdate: new Date().toLocaleTimeString()
   });
 
-  const [logs] = useState([
+  const [logs, setLogs] = useState([
     { id: '1', provider: 'Mayo Clinic', patient: 'PAT-8822', status: 'Compliant', time: '2m ago' },
     { id: '2', provider: 'Aetna Payer', patient: 'PAT-4412', status: 'Compliant', time: '5m ago' },
     { id: '3', provider: 'CMS Direct', patient: 'PAT-9911', status: 'Flagged', time: '12m ago' },
     { id: '4', provider: 'Stanford Health', patient: 'PAT-2233', status: 'Compliant', time: '15m ago' },
   ]);
+
+  // Phase 6: Real-time Data Streaming Simulation
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      const newLog = {
+        id: Math.floor(Math.random() * 10000).toString(),
+        provider: ['Mayo Clinic', 'Aetna Payer', 'Blue Cross', 'Stanford Health'][Math.floor(Math.random() * 4)],
+        patient: `PAT-${Math.floor(Math.random() * 9000 + 1000)}`,
+        status: Math.random() > 0.1 ? 'Compliant' : 'Flagged',
+        time: 'just now'
+      };
+      
+      setLogs(prev => [newLog, ...prev.slice(0, 9)]);
+      setStats(prev => ({
+        ...prev,
+        totalAttestations: prev.totalAttestations + 1,
+        lastUpdate: new Date().toLocaleTimeString()
+      }));
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="app-container">

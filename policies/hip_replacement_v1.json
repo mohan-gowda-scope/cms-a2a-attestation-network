@@ -1,0 +1,23 @@
+{
+  "policy_id": "CMS-POLICY-HIP-REPLACE-2026",
+  "title": "Total Hip Arthroplasty (THA) Coverage Guidelines",
+  "version": "1.1",
+  "criteria": [
+    {
+      "id": "CRIT-001",
+      "description": "Patient must have persistent hip pain for at least 3 months.",
+      "required": true
+    },
+    {
+      "id": "CRIT-002",
+      "description": "Symptoms must significantly limit daily activities (pain > 6/10).",
+      "required": true
+    },
+    {
+      "id": "CRIT-003",
+      "description": "Documented failure of at least 6 weeks of conservative treatment (PT, NSAIDs).",
+      "required": true
+    }
+  ],
+  "required_resources": ["Patient", "Observation", "Claim"]
+}
