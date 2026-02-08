@@ -27,8 +27,8 @@ const App: React.FC = () => {
           <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Autonomous Attestation Network Status</p>
         </div>
         <div className="header-meta">
-          <div className="badge">Network Live</div>
-          <Activity size={20} color="#10b981" />
+          <div className="badge" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>Live Simulation</div>
+          <Activity size={20} color="#3b82f6" />
         </div>
       </header>
 
@@ -94,6 +94,9 @@ const App: React.FC = () => {
 
       <footer className="app-footer">
         &copy; 2026 CMS A2A Innovation Lab. All Attestations are Cryptographically Signed.
+        <div style={{ marginTop: '0.5rem', opacity: 0.5 }}>
+          Infrastructure Optimized: ARM64 / Graviton enabled for maximum efficiency.
+        </div>
       </footer>
     </div>
   );
