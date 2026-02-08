@@ -51,7 +51,7 @@ def issue_verifiable_credential(attestation_id, tenant_id, validation):
         "issuer": "did:web:cms.gov:agent:a2a-v1",
         "credentialSubject": {
             "id": f"did:web:provider-{tenant_id}.com",
-            "attestationType": "GCPMigrationValidation",
+            "attestationType": "A2AStandardCompliance",
             "complianceStatus": "Compliant" if validation.get("valid") else "Flagged",
             "validationReason": validation.get("reason", "Automated Review")
         }

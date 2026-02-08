@@ -1,20 +1,38 @@
-# Technical Guide: A2A Handshake & Attestation
+# Technical Guide: Multi-Cloud A2A Attestation
 
-This document details the technical implementation of the Agent-to-Agent communication used in the CMS Attestation Network.
+This document details the technical implementation of the Agent-to-Agent communication and the choice-based infrastructure of the CMS Attestation Network.
 
 ## 1. Decentralized Identity (DID)
 
-Every agent in the network has a unique `did:web` identifier registered in the [Trust Registry](file:///Users/mohangowda/projects/cms-a2a-attestation/shared/trust_registry.py).
+Every agent in the network has a unique `did:web` identifier. We achieve **Cloud-Agnostic Identity** by using standardized Ed25519 keys that are independent of cloud provider-specific IAM.
 
-### Identity Resolution Flow
+### Identity Lifecycle
 
-1. **Lookup**: An agent looks up the destination DID in the registry.
-2. **Key Retrieval**: Retrieves the Public Key (Ed25519) and Endpoint URL.
-3. **Verify**: Any received payload must be signed by the corresponding Private Key.
+1. **Registry**: Agents are listed in the [Trust Registry](file:///Users/mohangowda/projects/cms-a2a-attestation/shared/trust_registry.py).
+2. **Resolution**: Requesting agents resolve the target DID to an endpoint (Lambda URL or Cloud Run URL).
+3. **Handshake**: Payloads are signed using the agent's private key and verified by the receiver.
 
-## 2. The JSON-RPC 2.0 Interface
+## 2. Infrastructure Choice (Terraform)
 
-All agents communicate via a standardized JSON-RPC 2.0 interface:
+The architecture is modular. Use the `cloud_provider` variable in `terraform/variables.tf` to toggle between stacks.
+
+### AWS Independent Stack
+
+- **Entrypoint**: API Gateway
+- **Compute**: 10 Independent Lambda Functions (Python 3.11)
+- **AI**: Amazon Bedrock (Anthropic Claude 3.5 Sonnet)
+- **Persistence**: DynamoDB Global Tables
+
+### GCP Independent Stack
+
+- **Entrypoint**: Cloud Run Load Balancer
+- **Compute**: 10 Independent Cloud Run Services
+- **AI**: Google Vertex AI (Gemini 1.5 Flash)
+- **Persistence**: Firestore (Native Mode)
+
+## 3. The JSON-RPC 2.0 Interface
+
+All agents, regardless of cloud, speak a standardized JSON-RPC 2.0 protocol.
 
 ```json
 {
@@ -23,28 +41,16 @@ All agents communicate via a standardized JSON-RPC 2.0 interface:
   "params": {
     "patient_id": "PAT-1234",
     "provider_id": "did:web:mayo.com",
-    "clinical_data": { ... }
+    "clinical_data": { "FHIR": "..." }
   },
-  "id": "abc-123"
+  "id": "transaction-001"
 }
 ```
 
-## 3. Multi-Cloud Orchestration (Clearinghouse)
+## 4. Local Simulation & Demo Mode
 
-The Clearinghouse Agent acts as a bridge between GCP and AWS:
+The `one_click_demo.py` script manages the complexities of cross-cloud testing by:
 
-- **Incoming**: Receives JSON-RPC over HTTPS (GCP GCF).
-- **Processing**: Orchestrates parallel calls to Lab (GCP) and Payer (AWS).
-- **Output**: Returns a bundled multi-signed Verifiable Credential (VC).
-
-## 4. AI-Driven Compliance
-
-The ecosystem uses **Gemini 1.5 Flash** for:
-
-- **Medical Necessity**: Matching patient history to policy documents.
-- **Audit**: Scanning the ledger for compliance anomalies.
-- **Research**: Matching signed lab results to trial criteria.
-
-## 5. Security Scanning
-
-All Terraform code is scanned using **Checkov** to ensure least-privilege IAM and secure cloud configuration.
+- Injecting mock environments for agents when running in non-cloud environments.
+- Handling the different response formats of AWS Lambda (proxy responses) vs GCP Cloud Functions.
+- Validating the 10-agent lifecycle flow across the chosen provider.

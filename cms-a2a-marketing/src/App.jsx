@@ -18,22 +18,19 @@ const plans = [
 ];
 
 export default function App() {
-  const [showSandbox, setShowSandbox] = useState(false);
-  const [logs, setLogs] = useState([]);
-  const [running, setRunning] = useState(false);
-  const scrollRef = useRef(null);
+  const [provider, setProvider] = useState('AWS');
 
   const sandboxSteps = [
-    { type: 'info', msg: "🚀 Initializing A2A Sandbox v1.0 [Region: us-central1]..." },
-    { type: 'info', msg: "💎 Step 1: Verification of Clinical Identity (NPI: 1234567890)..." },
-    { type: 'success', msg: "✅ Identity Verified: ACTIVE (did:web:credentialing-v1)" },
+    { type: 'info', msg: `🚀 Initializing A2A Sandbox [Provider: ${provider}]...` },
+    { type: 'info', msg: `💎 Step 1: Verification of Clinical Identity (NPI: 1234567890)...` },
+    { type: 'success', msg: `✅ Identity Verified: ACTIVE (did:web:cred-v1-${provider.toLowerCase()})` },
     { type: 'info', msg: "🏥 Step 2: Provider Initiates Attestation Swarm (FHIR R4 Bundle)..." },
     { type: 'info', msg: "🧬 Step 3: Collaborative Agency Review (Lab + Payer + PBM)..." },
-    { type: 'success', msg: "✅ Concurrence Token Issued by 3/3 Payers." },
+    { type: 'success', msg: `✅ Concurrence Token Issued via ${provider} Stack.` },
     { type: 'info', msg: "🏛️ Step 4: CMS Agent Final Audit & Verifiable Credential Issuance..." },
     { type: 'success', msg: "✅ CMS ISSUED VC: urn:uuid:7b42-9901-a2a-4421" },
-    { type: 'info', msg: "🔐 Cryptographic Proof: Ed25519Signature2020 verified." },
-    { type: 'success', msg: "🏁 Sandbox Simulation Complete: 10/10 Agents Synchronized." }
+    { type: 'info', msg: `🔐 Cryptographic Proof: Ed25519Signature2020 verified.` },
+    { type: 'success', msg: "🏁 Simulation Complete: 10/10 Agents Synchronized." }
   ];
 
   const runDemo = async () => {
@@ -41,7 +38,7 @@ export default function App() {
     setLogs([]);
     for (const step of sandboxSteps) {
       setLogs(prev => [...prev, step]);
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
     }
     setRunning(false);
   };
@@ -102,13 +99,25 @@ export default function App() {
           <div className="glass" style={{ minHeight: '300px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                <Terminal size={16} /> a2a-trust-shell --sim --mesh-v1
+                <Terminal size={16} /> a2a-trust-shell --provider={provider.toLowerCase()}
               </div>
-              {!running && !logs.length && (
-                <button onClick={runDemo} className="btn-primary" style={{ padding: '6px 16px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Play size={14} /> Start Simulation
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {!running && (
+                  <select 
+                    value={provider} 
+                    onChange={(e) => setProvider(e.target.value)}
+                    style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '4px', fontSize: '0.8rem', padding: '2px 8px' }}
+                  >
+                    <option value="AWS">AWS Stack</option>
+                    <option value="GCP">GCP Stack</option>
+                  </select>
+                )}
+                {!running && !logs.length && (
+                  <button onClick={runDemo} className="btn-primary" style={{ padding: '6px 16px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Play size={14} /> Start Simulation
+                  </button>
+                )}
+              </div>
             </div>
             
             <div ref={scrollRef} style={{ flex: 1, padding: '20px', fontFamily: 'monospace', fontSize: '0.9rem', maxHeight: '300px', overflowY: 'auto' }}>

@@ -4,60 +4,59 @@
 
 The CMS A2A (Agent-to-Agent) Attestation Network is a next-generation healthcare data validation system. It enables autonomous, cryptographically secure validation of healthcare attestations between providers, payers, and regulatory bodies (CMS) without manual intervention.
 
-## Key Components
+## 🌈 The Choice: Dual-Stack Architecture
 
-### 1. Provider Agent (AWS / GCP)
+Unlike traditional monolithic systems, the CMS A2A Network is **cloud-native and provider-agnostic**. Customers can deploy the entire 10-agent ecosystem on their platform of choice:
 
-Managed by healthcare providers, this agent initiates the attestation flow when new clinical data (FHIR bundles) is received. It orchestrates the process and stores the final approval.
+- **AWS Stack**: High-performance orchestration using **Lambda**, **Bedrock (Anthropic Claude 3.5)**, and **DynamoDB**.
+- **GCP Stack**: Native AI integration using **Cloud Run**, **Vertex AI (Gemini 1.5 Flash)**, and **Firestore**.
 
-### 2. Clearinghouse Agent (GCP)
+## Key Components (The 10-Agent Swarm)
 
-Acts as a trusted proxy and routing hub. It receives requests from providers, logs transactions in a multi-tenant ledger, and forwards data to the correct regulatory agent (CMS).
+### 1. Provider Agent
 
-### 3. CMS Attestation Agent (GCP)
+Initiates the attestation flow when clinical data (FHIR bundles) is received. It orchestrates the process and stores the final approval.
 
-The core validator. It uses **Vertex AI (Gemini 1.5 Flash)** to perform semantic validation on healthcare data. Once validated, it issues a **W3C Verifiable Credential** signed with an **Ed25519** private key.
+### 2. Clearinghouse Agent
 
-### 4. Payer Agent (AWS / GCP)
+Acts as the network's high-traffic routing hub, ensuring requests are logged and routed to the correct regulatory agent.
 
-The final decision node. It receives a "Prior Authorization" request from the Provider, accompanied by the CMS Verifiable Credential. It verifies the cryptographic proof against the global Trust Registry and auto-approves compliant requests.
+### 3. CMS Attestation Agent
 
-### 5. PBM Agent (GCP)
+The core validator. Uses AI (Bedrock or Vertex) to perform semantic validation on healthcare data. Issues **W3C Verifiable Credentials** signed with **Ed25519**.
 
-Managed by Pharmacy Benefit Managers. It validates medication eligibility, formulary compliance, and drug-drug interactions for pharmacy attestations.
+### 4. Payer Agent
 
-### 6. Lab (Diagnostic) Agent (GCP)
+The decision node. Verifies the CMS Verifiable Credential and auto-approves compliant prior authorization requests.
 
-Provides authoritative attestations for lab results (e.g., HbA1c) and imaging reports, ensuring diagnostic evidence is cryptographically bound to patient identity.
+### 5. PBM Agent (Pharmacy)
+
+Validates medication eligibility and formulary compliance for pharmacy attestations.
+
+### 6. Lab Agent (Diagnostics)
+
+Provides authoritative attestations for lab results and imaging, binding evidence to patient identity.
 
 ### 7. Auditor Agent (Governance)
 
-Managed by regulatory bodies like HHS-OIG. It performs real-time oversight of the attestation ledger to detect anomalies and ensure system-wide compliance.
+Performs real-time oversight of the attestation ledger to ensure system-wide compliance and anomaly detection.
 
 ### 8. Credentialing Agent (Trust)
 
-Verifies medical practitioner licensing (NPI) to ensure all clinical attestations originate from authorized and verified healthcare professionals.
+Verifies medical practitioner licensing (NPI) against global registries.
 
-### 9. Patient Empowerment Agent (Ownership)
+### 9. Patient Proxy Agent
 
-Represents the patient in the A2A mesh. It manages patient consent and provides a personal vault for all Verifiable Credentials issued about the patient.
+Represents the patient's interests, managing consent and providing a self-sovereign vault for health credentials.
 
 ### 10. Clinical Research Agent (Innovation)
 
-Uses Gemini 1.5 Flash to autonomously match patients to high-impact clinical trials using cryptographically verified health data.
-
-## Multi-Cloud Strategy
-
-The system is designed for maximum interoperability:
-
-- **AWS**: Ideal for legacy Payer systems and S3-based data triggers.
-- **GCP**: Leverages Vertex AI for semantic analysis and Firestore for the global attestation ledger.
-- **Interoperability**: Agents communicate using **JSON-RPC 2.0** over HTTPS, ensuring cloud-agnostic compatibility.
+Autonomously matches patients to clinical trials using cryptographically verified clinical findings.
 
 ## Trust Model
 
 Security is built on Decentralized Identity (DID) and Cryptographic Proofs:
 
-- **Trust Registry**: A centralized source of truth for agent DIDs and public keys.
-- **Ed25519 Signatures**: Every attestation is signed by CMS, ensuring data integrity and non-repudiation.
-- **VC Lifecycle**: Attestations follow the W3C Verifiable Credential standard, making them portable and machine-verifiable.
+- **Identity Parity**: Agents have the same cryptographic identity (`did:web`) regardless of which cloud they run on.
+- **Ed25519 Signatures**: Every attestation is signed, ensuring non-repudiation across the entire journey.
+- **Machine Verifiable**: No human review is required; the network is "Zero Trust" by design.
