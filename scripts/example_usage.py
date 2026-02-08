@@ -25,7 +25,22 @@ def example_request_attestation():
                 "resource": {
                     "resourceType": "Patient",
                     "id": "123",
-                    "name": [{"family": "Doe", "given": ["John"]}]
+                    "identifier": [{"system": "urn:oid:1.1.1.1", "value": "12345"}],
+                    "name": [{"family": "Doe", "given": ["John"]}],
+                    "gender": "male",
+                    "birthDate": "1970-01-01"
+                }
+            },
+            {
+                "fullUrl": "Claim/C-001",
+                "resource": {
+                    "resourceType": "Claim",
+                    "id": "C-001",
+                    "status": "active",
+                    "type": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/claim-type", "code": "institutional"}]},
+                    "use": "claim",
+                    "patient": {"reference": "Patient/123"},
+                    "provider": {"display": "Mayo Clinic"}
                 }
             }
         ]
