@@ -22,6 +22,14 @@ export PYTHONPATH=$PYTHONPATH:.
 python3 scripts/e2e_orchestrator.py
 ```
 
+### 4. Simple Usage Example
+
+For a minimal example of a provider requesting an attestation from CMS:
+
+```bash
+python3 scripts/example_usage.py
+```
+
 ## Cloud Deployment (IaC)
 
 ### GCP Deployment

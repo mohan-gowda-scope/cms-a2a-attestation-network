@@ -19,6 +19,14 @@ export PYTHONPATH=$PYTHONPATH:.
 python3 scripts/e2e_orchestrator.py
 ```
 
+### Simple Usage Example
+
+You can also run a simple, standalone request:
+
+```bash
+python3 scripts/example_usage.py
+```
+
 ## 🔐 Security Features
 
 - **W3C Verifiable Credentials**: Standardized attestation formats.
