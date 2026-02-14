@@ -25,7 +25,7 @@ resource "aws_iam_role" "a2a_lambda_role" {
 locals {
   agent_list = [
     "provider", "clearinghouse", "cms", "payer", "pbm", 
-    "lab", "auditor", "credentialing", "patient", "research"
+    "lab", "auditor", "credentialing", "patient", "research", "voice"
   ]
 }
 
